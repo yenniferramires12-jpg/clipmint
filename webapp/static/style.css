@@ -1671,6 +1671,7 @@ body.player-on .player-body { transform: none; }
 }
 /* By id: the captions panel borrows the trim panel's look, not its switch. */
 .player.trim-on #trim { display: block; }
+.player.edit-on #clipedit { display: block; }
 @keyframes slidein { from { opacity: 0; transform: translateX(-16px); } }
 @media (max-width: 900px) { .trim { width: min(390px, 90vw); margin: 0 auto; } }
 
@@ -2970,6 +2971,18 @@ body.job-paused .spin { animation-play-state: paused; opacity: .4; }
 .fr-note:empty { display: none; }
 .framer .t-actions { margin-top: 14px; }
 @media (max-width: 900px) { .framer { width: min(420px, 92vw); } }
+
+/* ======================= editing one clip ======================= */
+.ed-fld { display: block; margin-bottom: 12px; }
+.ed-fld > span { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 5px; }
+.ed-fld input[type=text] { width: 100%; }
+.ed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.ed-grid .ed-fld select { width: 100%; }
+.ed-color { display: flex; gap: 8px; }
+.ed-color select { flex: 1; min-width: 0; }
+.ed-color input[type=color] { width: 42px; flex: none; height: 38px; padding: 2px; cursor: pointer; }
+#clipedit .check { margin-bottom: 10px; }
+#clipedit .t-actions { margin-top: 14px; }
 
 /* Where the captions will sit, drawn over the clip while it is being moved. */
 .pv-capguide {

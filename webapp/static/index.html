@@ -828,6 +828,7 @@ addEventListener("load", function () {
         <button class="rbtn" id="pTrimBtn" title="Trim (T)"><svg><use href="#i-scissors"/></svg><span>Trim</span></button>
         <button class="rbtn hidden" id="pCapBtn" title="Fix the captions (C)"><svg><use href="#i-captions"/></svg><span>Captions</span></button>
         <button class="rbtn hidden" id="pFrameBtn" title="Move the frame or the captions (R)"><svg><use href="#i-frame"/></svg><span>Frame</span></button>
+        <button class="rbtn" id="pEditBtn" title="Editar título, subtítulos y diseño (E)"><svg><use href="#i-gear"/></svg><span>Editar</span></button>
         <button class="rbtn" id="pSeoBtn" title="Title, description and tags (B)"><svg><use href="#i-spark"/></svg><span>Boost</span></button>
         <button class="rbtn" id="pSave" title="Save to your folder"><svg><use href="#i-save"/></svg><span>Save</span></button>
         <a class="rbtn" id="pDownload" download title="Download"><svg><use href="#i-download"/></svg><span>Download</span></a>
@@ -901,6 +902,55 @@ addEventListener("load", function () {
       </div>
       <p class="hint">Drag the box over what the Short should show. It stays there for the whole clip, and a trim or a caption fix afterwards keeps it.</p>
       <div id="frMsg"></div>
+    </div>
+
+    <!-- clip editor panel -->
+    <div class="trim editer" id="clipedit">
+      <div class="t-head">
+        <h3><svg><use href="#i-gear"/></svg>Editar clip</h3>
+        <button class="ibtn sm" id="edClose"><svg><use href="#i-close"/></svg></button>
+      </div>
+
+      <label class="ed-fld"><span>Título del clip</span>
+        <input type="text" id="edTitle" maxlength="100" autocomplete="off">
+      </label>
+      <label class="ed-fld"><span>Hook (frase gancho)</span>
+        <input type="text" id="edHook" maxlength="300" autocomplete="off">
+      </label>
+
+      <div class="ed-grid">
+        <label class="ed-fld"><span>Estilo de subtítulos</span>
+          <select id="edCaptions"></select>
+        </label>
+        <label class="ed-fld"><span>Fuente de subtítulos</span>
+          <select id="edFont"></select>
+        </label>
+        <label class="ed-fld"><span>Palabra que suena</span>
+          <span class="ed-color"><select id="edHiColor"></select><input type="color" id="edHiPick" value="#FFE14D" title="Elegir otro color"></span>
+        </label>
+        <label class="ed-fld"><span>Otras palabras</span>
+          <span class="ed-color"><select id="edTextColor"></select><input type="color" id="edTextPick" value="#FFFFFF" title="Elegir otro color"></span>
+        </label>
+        <label class="ed-fld"><span>Posición de subtítulos</span>
+          <select id="edPos"></select>
+        </label>
+        <label class="ed-fld"><span>Diseño</span>
+          <select id="edLayout"></select>
+        </label>
+        <label class="ed-fld"><span>Formato</span>
+          <select id="edAspect"></select>
+        </label>
+      </div>
+
+      <label class="check"><input type="checkbox" id="edOutro"><span>Añadir el outro animado al final</span></label>
+      <label class="check"><input type="checkbox" id="edKeepCopy"><span>Guardar como una copia nueva (conservar el clip original)</span></label>
+
+      <div class="t-actions">
+        <button class="btn ghost" id="edGoTrim">Recortar</button>
+        <button class="btn primary" id="edApply">Aplicar cambios</button>
+      </div>
+      <p class="hint">El título y el hook se guardan al momento. Cambiar los subtítulos, el diseño, el formato o el outro vuelve a renderizar el clip desde el video original, así que tarda un poco.</p>
+      <div id="edMsg"></div>
     </div>
 
     <!-- trim panel -->

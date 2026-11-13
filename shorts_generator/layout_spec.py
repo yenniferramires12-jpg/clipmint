@@ -202,6 +202,9 @@ class LayoutSpec:
     # Put the channel's logo (Settings, brand.py) in a corner. Does nothing
     # until a logo has been uploaded.
     logo: bool = True
+    # Append the animated ClipZoneRD outro to the end of every rendered clip.
+    # A clip edited to drop it keeps the plain cut instead.
+    outro: bool = True
     # The clip's title across the top for the whole clip, instead of the hook
     # line for its first seconds. Shown even with captions off.
     title_on_screen: bool = False
@@ -261,7 +264,8 @@ class LayoutSpec:
         self.caption_color = caption_styles.normalise_colour(self.caption_color)
         self.caption_text_color = caption_styles.normalise_colour(self.caption_text_color)
         self.caption_position = caption_styles.normalise_position(self.caption_position)
-        for name in ("cut_pauses", "punch_ins", "emoji", "broll", "logo", "title_on_screen"):
+        for name in ("cut_pauses", "punch_ins", "emoji", "broll", "logo", "title_on_screen",
+                     "outro"):
             setattr(self, name, bool(getattr(self, name)))
         self.edit_from_words = [f for f in (self.edit_from_words or [])
                                 if f in EDIT_FIELDS]

@@ -1707,16 +1707,39 @@ def _strip_audio(path: Path) -> None:
     os.replace(tmp, path)
 
 
-async def _rerender(job, clip: dict, highlight: dict, mute: bool, what: str):
+# Fields of LayoutSpec one clip may override, kept on the clip record as
+# `edit_overrides`. Everything else a clip renders with stays the job's spec.
+_EDIT_OVERRIDE_FIELDS = ("captions", "caption_font", "caption_color",
+                         "caption_text_color", "caption_position",
+                         "layout", "aspect_ratio", "outro")
+
+
+def _edit_spec(job, overrides: Optional[dict] = None) -> LayoutSpec:
+    """job.spec with a clip's edit overrides applied — a copy, never the job's own spec."""
+    spec = copy.deepcopy(job.spec)
+    for key in _EDIT_OVERRIDE_FIELDS:
+        value = (overrides or {}).get(key)
+        if value is not None:
+            setattr(spec, key, value)
+    return spec.validate()
+
+
+async def _rerender(job, clip: dict, highlight: dict, mute: bool, what: str,
+                    spec: Optional[LayoutSpec] = None, keep_old: bool = False):
     """Render one clip again from the source and put it where the old one was.
 
-    Returns (render result, new filename). Shared by trimming and by caption
-    fixes: both re-render rather than patch the file, so the layout and the
-    edit stay exactly what the run was made with.
+    Returns (render result, new filename). Shared by trimming, caption fixes
+    and clip edits: all re-render rather than patch the file, so the layout
+    and the edit stay exactly what the run was made with. `spec` overrides
+    the spec the clip renders with; without one, the clip's stored edit
+    overrides are applied to job.spec, so an edit survives a later trim or
+    caption fix. `keep_old` leaves the previous file on disk instead of
+    deleting it, for an edit saved as a copy.
     """
     from shorts_generator.local.llm import call_local_llm
     from shorts_generator.render import render_highlights
 
+    effective = spec if spec is not None else _edit_spec(job, clip.get("edit_overrides") or {})
     old_path = _clip_path(job, clip["file"])
     prefix = f"edit_{clip.get('index', 1):02d}_{int(time.time())}"
     # A frame or a caption height someone set by hand belongs to the clip, not
@@ -1725,7 +1748,7 @@ async def _rerender(job, clip: dict, highlight: dict, mute: bool, what: str):
     highlight.setdefault("caption_y", clip.get("caption_y"))
 
     def _render():
-        out = render_highlights(job.source_path, [highlight], job.spec,
+        out = render_highlights(job.source_path, [highlight], effective,
                                 out_dir=job.out_dir, name_prefix=prefix,
                                 language=job.language, kind=job_kind(job),
                                 llm_fn=call_local_llm)
@@ -1749,7 +1772,9 @@ async def _rerender(job, clip: dict, highlight: dict, mute: bool, what: str):
     # The old render is dead weight once the new one exists, and clearing it
     # first frees its name: a re-cut of "My Title.mp4" should be called
     # "My Title.mp4" again, not pushed to "My Title_2.mp4" by its own predecessor.
-    if old_path.name != os.path.basename(new_path):
+    # An edit saved as a copy keeps the old file, and the rename below gives
+    # the new one its own name.
+    if not keep_old and old_path.name != os.path.basename(new_path):
         with contextlib.suppress(OSError):
             old_path.unlink()
 
@@ -1870,6 +1895,133 @@ async def trim_clip(job_id: str, filename: str, req: TrimRequest) -> dict:
     })
 
     return updated or {}
+
+
+class ClipEditRequest(BaseModel):
+    title: Optional[str] = None
+    hook_sentence: Optional[str] = None
+    captions: Optional[str] = None
+    caption_font: Optional[str] = None
+    caption_color: Optional[str] = None
+    caption_text_color: Optional[str] = None
+    caption_position: Optional[str] = None
+    layout: Optional[str] = None
+    aspect_ratio: Optional[str] = None
+    outro: Optional[bool] = None
+    keep_copy: bool = False
+
+
+@app.post("/api/jobs/{job_id}/clips/{filename}/edit")
+async def edit_clip(job_id: str, filename: str, req: ClipEditRequest) -> dict:
+    """Edit one clip: its title, hook, caption style, layout, format or outro.
+
+    Title and hook are metadata only — the record changes, nothing is
+    re-rendered, and the new title is also the title the publish flow shows.
+    A change to the captions, layout, format or outro re-renders the clip
+    from the source with a spec that is job.spec plus this clip's overrides,
+    so the edit survives a later trim or caption fix. keep_copy keeps the old
+    clip and adds the re-render as a new one instead of replacing it.
+    """
+    job = _job_or_404(job_id)
+    clip = STORE.clip(job, os.path.basename(filename))
+    if clip is None:
+        raise HTTPException(404, "No such clip")
+
+    # The render overrides in this request, merged over the ones the clip
+    # already carries, so an edit only ever touches what it names.
+    new_overrides = {}
+    for key in _EDIT_OVERRIDE_FIELDS:
+        value = getattr(req, key)
+        if value is not None:
+            new_overrides[key] = value
+    overrides = dict(clip.get("edit_overrides") or {})
+    overrides.update(new_overrides)
+
+    title = req.title.strip() if req.title is not None else None
+    hook = req.hook_sentence.strip() if req.hook_sentence is not None else None
+    if title is not None:
+        if not title:
+            raise HTTPException(400, "The title can't be empty.")
+        if len(title) > 100:
+            raise HTTPException(400, "Titles have to be 100 characters or fewer.")
+    if hook is not None and len(hook) > 300:
+        raise HTTPException(400, "The hook has to be 300 characters or fewer.")
+
+    # Does anything here actually change how the clip renders?
+    current = _edit_spec(job, clip.get("edit_overrides") or {})
+    wanted = _edit_spec(job, overrides)
+    render_changed = any(getattr(current, k) != getattr(wanted, k)
+                         for k in _EDIT_OVERRIDE_FIELDS)
+    title_changed = title is not None and title != (clip.get("title") or "")
+    hook_changed = hook is not None and hook != (clip.get("hook_sentence") or "")
+    if not render_changed and not title_changed and not hook_changed:
+        raise HTTPException(400, "Nothing to change.")
+
+    # A title or hook on its own is metadata: no re-render, no new file.
+    if not render_changed:
+        updates = {"edit_overrides": overrides, "edited": True}
+        if title_changed:
+            updates["title"] = title
+            seo = dict(clip.get("seo") or {})
+            seo["title"] = title
+            updates["seo"] = seo
+        if hook_changed:
+            updates["hook_sentence"] = hook
+        return STORE.replace_clip(job, clip["file"], updates) or {}
+
+    if clip.get("start_time") is None or clip.get("end_time") is None:
+        raise HTTPException(409, "This clip has no span to re-render from the source.")
+    if not job.source_path or not os.path.exists(job.source_path):
+        raise HTTPException(409, "The source video for this job is gone — re-run it to edit.")
+
+    # The working copy carries the new title and hook, so the re-render is
+    # named after them and the hook line it opens on is the new one.
+    working = dict(clip)
+    if title is not None:
+        working["title"] = title
+        seo = dict(working.get("seo") or {})
+        seo["title"] = title
+        working["seo"] = seo
+    if hook is not None:
+        working["hook_sentence"] = hook
+
+    highlight = {
+        "title": working.get("title") or "Clip",
+        "start_time": float(clip["start_time"]),
+        "end_time": float(clip["end_time"]),
+        "score": clip.get("score"),
+        "hook_sentence": working.get("hook_sentence") or "",
+        "virality_reason": clip.get("virality_reason") or "",
+        "heard_words": clip.get("heard_words"),
+        "caption_words": clip.get("caption_words"),
+    }
+    # Only a clip that opened on a replay the first time gets one again.
+    if clip.get("hook_replay_seconds") and clip.get("hook_peak") is not None:
+        highlight["hook_peak"] = clip["hook_peak"]
+    result, new_name = await _rerender(job, working, highlight, bool(clip.get("muted")),
+                                       "edit", spec=wanted, keep_old=req.keep_copy)
+
+    updates = {
+        "file": new_name,
+        "url": f"/api/jobs/{job.id}/clips/{new_name}",
+        "title": working.get("title"),
+        "hook_sentence": working.get("hook_sentence"),
+        "seo": working.get("seo"),
+        "duration": clip_length({**result, "start_time": clip["start_time"],
+                                 "end_time": clip["end_time"]}),
+        "hook_replay_seconds": result.get("hook_replay_seconds"),
+        "edit": result.get("edit"),
+        "muted": bool(clip.get("muted")),
+        "edited": True,
+        "edit_overrides": overrides,
+        "framing": framing.summary(result.get("layout")),
+    }
+    if req.keep_copy:
+        new_clip = dict(clip)
+        new_clip.update(updates)
+        new_clip["rank"] = None
+        return STORE.add_clip(job, new_clip)
+    return STORE.replace_clip(job, clip["file"], updates) or {}
 
 
 def _output_size(job, src_w: int, src_h: int):

@@ -3582,7 +3582,7 @@ function openPlayer(i) {
   $("pDownload").setAttribute("download", c.file || "short.mp4");
 
   body.classList.add("player-on");
-  $("player").classList.remove("trim-on", "cap-on");
+  $("player").classList.remove("trim-on", "cap-on", "edit-on");
   closeFrame();
   $("pCapBtn").classList.toggle("hidden", !canFixCaptions(c));
   $("pFrameBtn").classList.toggle("hidden", !canFrame(c));
@@ -3624,7 +3624,7 @@ function editSummary(c) {
 
 function closePlayer() {
   body.classList.remove("player-on");
-  $("player").classList.remove("trim-on", "seo-on", "cap-on");
+  $("player").classList.remove("trim-on", "seo-on", "cap-on", "edit-on");
   closeFrame();
   vid.pause();
   feedbackMaybeAsk();
@@ -3711,6 +3711,7 @@ document.addEventListener("keydown", (e) => {
   else if (k === "m") { vid.muted = !vid.muted; setMuteIcon(); }
   else if (k === "t") { toggleTrim(); }
   else if (k === "c") { toggleCaptions(); }
+  else if (k === "e") { toggleEdit(); }
   else if (k === "r") { toggleFrame(); }
   else if (k === "b") { toggleSeo(); }
   else if (k === "f") { showClipFile(clips[cur]); }
@@ -4100,7 +4101,7 @@ function toggleSeo() {
   const p = $("player");
   if (p.classList.contains("seo-on")) { p.classList.remove("seo-on"); return; }
   if (!clips[cur]) return;
-  p.classList.remove("trim-on", "cap-on");
+  p.classList.remove("trim-on", "cap-on", "edit-on");
   closeFrame();
   renderSeo();
   p.classList.add("seo-on");
@@ -4214,10 +4215,178 @@ function toggleTrim() {
   if (p.classList.contains("trim-on")) { p.classList.remove("trim-on"); return; }
   if (!clips[cur]) return;
   resetTrim();
-  p.classList.remove("seo-on", "cap-on");
+  p.classList.remove("seo-on", "cap-on", "edit-on");
   closeFrame();
   p.classList.add("trim-on");
 }
+
+// ---------------------------------------------------------------- clip editor
+//
+// Edit one clip after it was cut: title, hook, caption style, layout,
+// format, outro. Title and hook are metadata — the server saves them
+// without re-rendering. Anything else re-renders the clip from the source
+// with the job's spec plus this clip's overrides, so the edit survives a
+// later trim or caption fix.
+const ED_CAPTION_ES = { off: "Sin subtítulos", bold: "Negrita", punch: "Impacto",
+                        clean: "Limpio", comic: "Cómic", clipzonerd: "ClipZoneRD" };
+const ED_LAYOUT_ES = { stacked: "Dividida (cámara arriba, juego abajo)",
+                       facetrack: "Seguimiento de cara", center: "Solo juego (centrado)" };
+const ED_POS_ES = { auto: "Automática", top: "Arriba", middle: "Centro", bottom: "Abajo" };
+let edOptions = null;
+const edJobSpecs = {};   // job_id -> spec, so the editor shows the run's own choices
+
+async function loadClipEditOptions() {
+  if (edOptions) return edOptions;
+  try {
+    edOptions = await json("/api/options");
+  } catch (_) {
+    edOptions = { captions: [], caption_fonts: [], caption_positions: [],
+                  caption_highlights: [], caption_text_colours: [],
+                  layouts: [], aspect_ratios: [] };
+  }
+  return edOptions;
+}
+
+async function loadJobSpecForEdit(jobId) {
+  if (edJobSpecs[jobId]) return edJobSpecs[jobId];
+  try {
+    const d = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
+    edJobSpecs[jobId] = d.spec || {};
+  } catch (_) {
+    edJobSpecs[jobId] = {};
+  }
+  return edJobSpecs[jobId];
+}
+
+function edFillSelect(sel, items, value) {
+  const el = $(sel);
+  el.innerHTML = "";
+  for (const it of items) {
+    const o = document.createElement("option");
+    o.value = it.value;
+    o.textContent = it.label;
+    el.appendChild(o);
+  }
+  // A value saved by hand may not be in the list any more: keep it as an
+  // option rather than silently dropping it.
+  if (value != null && value !== "" && !items.some((it) => it.value === value)) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = value;
+    el.appendChild(o);
+  }
+  el.value = value != null ? value : "";
+}
+
+function edFillColour(sel, colours, value) {
+  edFillSelect(sel, [{ value: "", label: "Del estilo" }]
+    .concat(colours.map((c) => ({ value: c, label: `#${c}` }))), value);
+}
+
+// The native colour picker next to a colour select sets it to any colour,
+// and the select follows the picker when it holds a real colour.
+function edWireColourPick(selectId, pickId) {
+  const sel = $(selectId), pick = $(pickId);
+  pick.addEventListener("change", () => {
+    const hex = pick.value.replace("#", "").toUpperCase();
+    if (![...sel.options].some((o) => o.value === hex)) {
+      const o = document.createElement("option");
+      o.value = hex;
+      o.textContent = `#${hex}`;
+      sel.appendChild(o);
+    }
+    sel.value = hex;
+  });
+  sel.addEventListener("change", () => {
+    if (/^[0-9A-F]{6}$/i.test(sel.value)) pick.value = `#${sel.value}`;
+  });
+}
+
+async function toggleEdit() {
+  const p = $("player");
+  if (p.classList.contains("edit-on")) { p.classList.remove("edit-on"); return; }
+  const c = clips[cur];
+  if (!c) return;
+  const o = await loadClipEditOptions();
+  const spec = await loadJobSpecForEdit(jobOf(c));
+  const ov = c.edit_overrides || {};
+  // What the clip renders with today: its own overrides over the run's spec.
+  const val = (key, fallback) => (ov[key] !== undefined && ov[key] !== null)
+    ? ov[key] : (spec[key] !== undefined && spec[key] !== null ? spec[key] : fallback);
+
+  $("edTitle").value = c.title || "";
+  $("edHook").value = c.hook_sentence || "";
+  edFillSelect("edCaptions", (o.captions || []).map((x) => ({ value: x.value, label: ED_CAPTION_ES[x.value] || x.label })), val("captions", "off"));
+  edFillSelect("edFont", [{ value: "", label: "La del estilo" }].concat((o.caption_fonts || []).map((x) => ({ value: x.value, label: x.label }))), val("caption_font", ""));
+  edFillColour("edHiColor", o.caption_highlights || [], val("caption_color", ""));
+  edFillColour("edTextColor", o.caption_text_colours || [], val("caption_text_color", ""));
+  edFillSelect("edPos", (o.caption_positions || []).map((v) => ({ value: v, label: ED_POS_ES[v] || v })), val("caption_position", "auto"));
+  edFillSelect("edLayout", (o.layouts || []).map((x) => ({ value: x.value, label: ED_LAYOUT_ES[x.value] || x.label })), val("layout", "stacked"));
+  edFillSelect("edAspect", (o.aspect_ratios || []).map((x) => ({ value: x.value, label: x.value })), val("aspect_ratio", "9:16"));
+  $("edOutro").checked = val("outro", true) !== false;
+  $("edKeepCopy").checked = false;
+  $("edMsg").textContent = "";
+  const hi = $("edHiColor").value, tx = $("edTextColor").value;
+  if (/^[0-9A-F]{6}$/i.test(hi)) $("edHiPick").value = `#${hi}`;
+  if (/^[0-9A-F]{6}$/i.test(tx)) $("edTextPick").value = `#${tx}`;
+
+  p.classList.remove("seo-on", "trim-on", "cap-on");
+  closeFrame();
+  p.classList.add("edit-on");
+}
+
+async function applyClipEdit() {
+  const c = clips[cur];
+  if (!c) return;
+  const msg = $("edMsg");
+  const btn = $("edApply");
+  const payload = {
+    title: $("edTitle").value.trim(),
+    hook_sentence: $("edHook").value.trim(),
+    captions: $("edCaptions").value,
+    caption_font: $("edFont").value,
+    caption_color: $("edHiColor").value,
+    caption_text_color: $("edTextColor").value,
+    caption_position: $("edPos").value,
+    layout: $("edLayout").value,
+    aspect_ratio: $("edAspect").value,
+    outro: $("edOutro").checked,
+    keep_copy: $("edKeepCopy").checked,
+  };
+  btn.disabled = true;
+  msg.textContent = "Aplicando cambios…";
+  try {
+    const oldFile = c.file;
+    const updated = await json(
+      `/api/jobs/${encodeURIComponent(jobOf(c))}/clips/${encodeURIComponent(c.file)}/edit`,
+      { method: "POST", body: JSON.stringify(payload) });
+    if (payload.keep_copy) {
+      clips.push(updated);
+      openPlayer(clips.length - 1);
+    } else {
+      patchClip(c, updated);
+      openPlayer(cur);
+    }
+    // A re-render is a new file (or the same name with new content): the
+    // player must not keep showing the cached video.
+    if (updated.file !== oldFile) {
+      vid.src = updated.url + "?v=" + Date.now();
+      vid.play().catch(() => {});
+    }
+    renderClips();
+    toast(payload.keep_copy ? "Copia guardada." : "Clip actualizado.");
+  } catch (e) {
+    msg.textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("pEditBtn").onclick = toggleEdit;
+$("edClose").onclick = () => $("player").classList.remove("edit-on");
+$("edApply").onclick = applyClipEdit;
+$("edGoTrim").onclick = () => { $("player").classList.remove("edit-on"); toggleTrim(); };
+edWireColourPick("edHiColor", "edHiPick");
+edWireColourPick("edTextColor", "edTextPick");
 
 // ---------------------------------------------------------------- captions
 //
@@ -4244,7 +4413,7 @@ function toggleCaptions() {
   if (!canFixCaptions(c)) return;
   $("capText").value = joinWords((c.caption_words || []).length ? c.caption_words : c.heard_words);
   $("capFixMsg").innerHTML = "";
-  p.classList.remove("seo-on", "trim-on");
+  p.classList.remove("seo-on", "trim-on", "edit-on");
   closeFrame();
   p.classList.add("cap-on");
 }
@@ -4305,7 +4474,7 @@ async function toggleFrame() {
   if (p.classList.contains("frame-on")) { closeFrame(); return; }
   const c = clips[cur];
   if (!canFrame(c)) return;
-  p.classList.remove("seo-on", "trim-on", "cap-on");
+  p.classList.remove("seo-on", "trim-on", "cap-on", "edit-on");
   p.classList.add("frame-on");
   $("frMsg").innerHTML = "";
   $("frNote").textContent = "";

@@ -452,6 +452,17 @@ class JobStore:
             self._persist(job)
         return found
 
+    def add_clip(self, job: Job, clip: Dict) -> Dict:
+        """Append a new clip to a job — an edited copy keeps its place last."""
+        with self._lock:
+            clip = dict(clip)
+            clip["index"] = max((int(c.get("index") or 0) for c in job.clips), default=0) + 1
+            job.clips.append(clip)
+            job._version += 1
+            found = dict(clip)
+        self._persist(job)
+        return found
+
     def remove_clip(self, job: Job, filename: str) -> bool:
         with self._lock:
             keep = [c for c in job.clips if c.get("file") != filename]

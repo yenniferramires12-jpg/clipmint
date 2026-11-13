@@ -121,7 +121,8 @@ def render_highlights(
     _edit(results, spec, language, kind, llm_fn)
     if spec.hook_replay:
         _add_hook_openings(results)
-    _append_outro(results, out_w, out_h)
+    if getattr(spec, "outro", True):
+        _append_outro(results, out_w, out_h)
     _write_subtitles(results)
     return results
 
