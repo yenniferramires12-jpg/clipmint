@@ -318,7 +318,15 @@ def _call_gemini_with(client, model: str, prompt: str, contents: Optional[list])
                                       "401", "403")):
                 raise _KeySpent("was refused by Google", daily=False) from e
 
-            permanent = any(t in msg for t in ("INVALID_ARGUMENT", "NOT_FOUND", "404"))
+            # A JSON validation failure is the model emitting malformed JSON,
+            # not a bad request: the same prompt usually succeeds on retry,
+            # so it must not be treated as permanent. (Gemini reports
+            # json_validate_failed as INVALID_ARGUMENT, which is why this
+            # check has to come first.)
+            json_failed = any(t in msg for t in ("json_validate_failed",
+                                                 "Failed to validate JSON"))
+            permanent = (not json_failed and
+                         any(t in msg for t in ("INVALID_ARGUMENT", "NOT_FOUND", "404")))
             if permanent or attempt == attempts - 1:
                 raise
 
