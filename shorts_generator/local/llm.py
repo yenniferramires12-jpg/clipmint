@@ -91,6 +91,48 @@ class DailyQuotaExceeded(RuntimeError):
     """The provider's per-day allowance is gone. Waiting will not help."""
 
 
+def _chat_with_retries(create, provider: str):
+    """Run one OpenAI-compatible chat call, retrying what retrying can fix.
+
+    These backends had no retry logic of their own, so a single rate limit
+    or a single malformed JSON generation killed the run outright. Rate
+    limits (429/413) clear when the provider's per-minute window resets, so
+    those wait just over a minute; a JSON validation failure is the model
+    emitting malformed JSON, which a fresh sample usually fixes, so those
+    retry on a short backoff. Auth failures and unknown models never improve,
+    so those raise at once.
+    """
+    attempts = 5
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            return create()
+        except Exception as e:
+            last_error = e
+            msg = str(e)
+            if any(t in msg for t in ("401", "403", "404", "API_KEY_INVALID",
+                                      "API key not valid", "PERMISSION_DENIED",
+                                      "UNAUTHENTICATED", "NOT_FOUND")):
+                raise
+            rate_limited = any(t in msg for t in ("rate_limit_exceeded", "429", "413"))
+            json_failed = any(t in msg for t in ("json_validate_failed",
+                                                 "Failed to validate JSON"))
+            if not (rate_limited or json_failed) or attempt == attempts - 1:
+                raise
+            if rate_limited:
+                m = re.search(r"retry in ([0-9.]+)s", msg)
+                delay = float(m.group(1)) + 1 if m else 65.0
+                reason = "rate limited"
+            else:
+                delay = min(60.0, 5.0 * (2 ** attempt))
+                reason = "invalid JSON from the model"
+            short = msg.splitlines()[0][:120]
+            print(f"[llm] {reason}; retrying in {delay:.0f}s "
+                  f"(attempt {attempt + 1}/{attempts}) — {short}", flush=True)
+            time.sleep(delay)
+    raise last_error
+
+
 def call_openai_llm(prompt: str) -> str:
     """OpenAI Chat Completions backend used by --mode local."""
     try:
@@ -103,11 +145,13 @@ def call_openai_llm(prompt: str) -> str:
 
     model = current_model("openai")
     client = OpenAI(api_key=require_openai_key())
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.7,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    def _create():
+        return client.chat.completions.create(
+            model=model,
+            temperature=0.7,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    response = _chat_with_retries(_create, "openai")
     usage.record("openai", model)
     return response.choices[0].message.content or ""
 
@@ -143,12 +187,14 @@ def call_groq_llm(prompt: str) -> str:
 
     model = current_model("groq")
     client = OpenAI(api_key=require_groq_key(), base_url=GROQ_BASE_URL)
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.2,          # same as Gemini's: judgement, not invention
-        response_format={"type": "json_object"},
-        messages=[{"role": "user", "content": prompt}],
-    )
+    def _create():
+        return client.chat.completions.create(
+            model=model,
+            temperature=0.2,          # same as Gemini's: judgement, not invention
+            response_format={"type": "json_object"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+    response = _chat_with_retries(_create, "groq")
     usage.record("groq", model)
     return response.choices[0].message.content or ""
 
@@ -183,11 +229,13 @@ def call_openrouter_llm(prompt: str) -> str:
         ) from e
 
     model = current_model("openrouter")
-    response = _openrouter_client().chat.completions.create(
-        model=model,
-        temperature=0.2,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    def _create():
+        return _openrouter_client().chat.completions.create(
+            model=model,
+            temperature=0.2,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    response = _chat_with_retries(_create, "openrouter")
     usage.record("openrouter", model)
     text = response.choices[0].message.content or ""
     if not text.strip():
