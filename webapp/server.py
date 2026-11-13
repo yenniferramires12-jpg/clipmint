@@ -14,10 +14,11 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
@@ -92,6 +93,10 @@ class EditChoice(BaseModel):
     emoji: Optional[bool] = None
     broll: Optional[bool] = None
     title_on_screen: Optional[bool] = None
+    # ClipZoneRD: the clip's title at the start, in the subtitle style, for
+    # its first seconds (default on, 3s). None leaves the default.
+    title_intro: Optional[bool] = None
+    title_intro_seconds: Optional[float] = None
 
 
 class LayoutPreviewRequest(EditChoice):
@@ -1259,6 +1264,140 @@ async def youtube_upload_progress(upload_id: str) -> dict:
     return st
 
 
+# --- share: Facebook, Instagram, TikTok -----------------------------------
+# One click, from the clip's own SEO. YouTube keeps its own flow (see
+# youtube_upload_clip above); these three live in webapp/social_upload.py.
+
+class ShareClientRequest(BaseModel):
+    client_id: str = ""
+    secret: str = ""
+
+
+class ShareRequest(BaseModel):
+    """Publish one clip to the platforms named, with its own SEO unless the
+    boxes say otherwise. Nothing is trimmed or rewritten on the way."""
+    platforms: List[str] = []
+    title: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+@app.get("/api/share/status")
+async def share_status() -> dict:
+    from . import social_upload
+    return {"platforms": social_upload.all_status(),
+            "help": social_upload.CLIENT_HELP}
+
+
+@app.post("/api/share/{provider}/client")
+async def share_client(provider: str, req: ShareClientRequest) -> dict:
+    from . import social_upload
+    try:
+        return await asyncio.to_thread(social_upload.set_client, provider,
+                                       req.client_id, req.secret)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/share/{provider}/connect")
+async def share_connect(provider: str, request: Request) -> dict:
+    """Open the platform's consent page in the user's real browser."""
+    import webbrowser
+    from . import social_upload
+    if provider not in social_upload.PROVIDERS:
+        raise HTTPException(404, "No such platform")
+    port = request.url.port or 80
+    redirect = f"http://127.0.0.1:{port}/api/share/{provider}/callback"
+    try:
+        url = await asyncio.to_thread(social_upload.begin_connect, provider, redirect)
+    except social_upload.NotConnected as e:
+        raise HTTPException(400, str(e))
+    await asyncio.to_thread(webbrowser.open, url)
+    return {"connecting": provider}
+
+
+@app.get("/api/share/{provider}/callback", response_class=HTMLResponse)
+async def share_callback(provider: str, state: str = "", code: str = "",
+                         error: str = "") -> HTMLResponse:
+    """Where the platform sends the browser after the consent page."""
+    import html
+    from . import social_upload
+    if provider not in social_upload.PROVIDERS:
+        raise HTTPException(404, "No such platform")
+    problem = await asyncio.to_thread(social_upload.finish_connect, provider,
+                                      state, code, error)
+    if problem:
+        head, text = f"{provider} wasn't connected", problem
+    else:
+        who = (social_upload.status(provider).get("account") or {}).get("name")
+        head = f"Connected to {who}" if who else f"{provider} is connected"
+        text = "You can close this tab and go back to ClipZoneRD."
+    page = f"""<!doctype html><meta charset="utf-8"><title>ClipZoneRD</title>
+<style>body{{font:16px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#f1f1f1;
+text-align:center;padding:60px 20px}}h1{{font-size:22px}}p{{color:#aaa}}</style>
+<h1>{html.escape(head)}</h1><p>{html.escape(text)}</p>"""
+    return HTMLResponse(page)
+
+
+@app.post("/api/share/{provider}/disconnect")
+async def share_disconnect(provider: str) -> dict:
+    from . import social_upload
+    try:
+        return await asyncio.to_thread(social_upload.disconnect, provider)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/jobs/{job_id}/clips/{filename}/share")
+async def share_clip(job_id: str, filename: str, req: ShareRequest) -> dict:
+    """Publish one clip to the platforms named, with its own SEO.
+
+    YouTube is not here: it has its own upload box (with scheduling and
+    privacy), so the share panel sends YouTube through /youtube instead.
+    TikTok always lands as a draft in her app's inbox, never on the public
+    feed -- direct posting needs an audit this app cannot pass.
+    """
+    from . import social_upload
+    job = _job_or_404(job_id)
+    safe = os.path.basename(filename)
+    clip = STORE.clip(job, safe)
+    if clip is None:
+        raise HTTPException(404, "No such clip")
+    path = _clip_path(job, safe)
+    if not path.exists():
+        raise HTTPException(404, "That clip's file is missing — it may have been moved.")
+
+    platforms = [str(p).lower() for p in (req.platforms or [])]
+    for p in platforms:
+        if p not in social_upload.PROVIDERS:
+            raise HTTPException(400, f"No such platform: {p}")
+    if not platforms:
+        raise HTTPException(400, "Pick at least one platform.")
+
+    seo = clip.get("seo") or {}
+    title = req.title if req.title is not None else (seo.get("title") or clip.get("title") or "")
+    description = req.description if req.description is not None else (seo.get("description") or "")
+    tags = req.tags if req.tags is not None else (seo.get("tags") or [])
+
+    results: Dict[str, Dict] = {}
+    for p in platforms:
+        fn = social_upload.UPLOADERS[p]
+        try:
+            results[p] = await asyncio.to_thread(fn, path, title, description, tags)
+        except social_upload.NotConnected as e:
+            results[p] = {"platform": p, "error": str(e)}
+        except social_upload.ShareError as e:
+            results[p] = {"platform": p, "error": str(e)}
+        except Exception as e:  # noqa: BLE001 - one platform failing must not take the others with it
+            results[p] = {"platform": p, "error": str(e)}
+
+    done = [p for p, r in results.items() if "error" not in r]
+    if done:
+        shared = list(dict.fromkeys(list(clip.get("shared_to") or []) + done))
+        STORE.replace_clip(job, safe, {"shared_to": shared})
+    return {"results": results}
+
+
 @app.post("/api/youtube/open")
 async def youtube_open(req: YoutubeOpenRequest) -> dict:
     """Open an uploaded video in the user's browser, by its id only."""
@@ -1346,6 +1485,26 @@ def _override_edit(spec: LayoutSpec, req: EditChoice) -> None:
             continue
         setattr(spec, name, value)
     spec.validate()
+
+
+async def _spec_from_request(req, read_seconds: float = 60.0) -> LayoutSpec:
+    """The LayoutSpec a create/live request asks for: the prompt's words,
+    then the UI controls over them. Shared by a normal run and a live, so a
+    live's parts render exactly like a run made by hand."""
+    spec, _ = await _read_prompt(req.prompt or "", getattr(req, "use_llm", True),
+                                 read_seconds)
+    _override_aspect(spec, getattr(req, "aspect_ratio", None))
+    _override_kind(spec, getattr(req, "content_kind", None))
+    _override_layout(spec, getattr(req, "layout", None))
+    _override_duration(spec, getattr(req, "duration_seconds", None),
+                       getattr(req, "monetize", None))
+    _override_edit(spec, req)
+    if getattr(req, "hook_replay", None) is not None:
+        spec.hook_replay = bool(req.hook_replay)
+    if getattr(req, "num_clips", None):
+        spec.num_clips = req.num_clips
+        spec.validate()
+    return spec
 
 
 # How long a request waits for the model to read a prompt. Gemini retries a
@@ -1523,17 +1682,7 @@ async def create_job(req: JobRequest) -> dict:
         raise HTTPException(400, "No source given")
     _require_llm_key()
 
-    spec, _ = await _read_prompt(req.prompt, req.use_llm, JOB_READ_SECONDS)
-    _override_aspect(spec, req.aspect_ratio)
-    _override_kind(spec, req.content_kind)
-    _override_layout(spec, req.layout)
-    _override_duration(spec, req.duration_seconds, req.monetize)
-    _override_edit(spec, req)
-    if req.hook_replay is not None:
-        spec.hook_replay = bool(req.hook_replay)
-    if req.num_clips:
-        spec.num_clips = req.num_clips
-        spec.validate()
+    spec = await _spec_from_request(req)
 
     # A quality named in the words ("720 is fine") wins over the control, the
     # same way every other setting the words name does.
@@ -1569,9 +1718,140 @@ async def library() -> dict:
             "shorts_dir": snap["shorts_dir"],
             "restored": snap["restored"],
             "status": snap["status"],
+            "requested_clips": snap.get("requested_clips") or 0,
+            "delivered_clips": snap.get("delivered_clips") or len(clips),
+            "shortfall": snap.get("shortfall"),
             "clips": clips,
         })
     return {"runs": runs, "count": sum(len(r["clips"]) for r in runs)}
+
+
+# --- live recordings ------------------------------------------------------
+# One live at a time, recorded in parts, clips cut while it airs. The part
+# jobs are normal jobs (see webapp/live.py), so they show up in the library
+# and the monthly counts like any other run.
+
+class LiveStartRequest(EditChoice):
+    """Start recording a live. The edit controls are the same as a normal run:
+    every part renders with them. `num_clips` is the clips per part."""
+    url: str
+    clips_per_part: int = 2
+    part_minutes: int = 5
+    prompt: str = ""
+    num_clips: Optional[int] = None
+    language: Optional[str] = "en"
+    use_llm: bool = True
+    aspect_ratio: Optional[str] = None
+    content_kind: Optional[str] = None
+    layout: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    monetize: Optional[bool] = None
+    hook_replay: Optional[bool] = None
+
+
+_LIVES = None
+
+
+def _lives():
+    """The live manager, made on first use so importing the server never
+    starts its poller thread."""
+    global _LIVES
+    if _LIVES is None:
+        from . import live as live_mod
+        _LIVES = live_mod.LiveManager()
+    return _LIVES
+
+
+@app.post("/api/live/start")
+async def live_start(req: LiveStartRequest) -> dict:
+    url = (req.url or "").strip()
+    if not url:
+        raise HTTPException(400, "No live link given")
+    _require_llm_key()
+    spec = await _spec_from_request(req)
+    try:
+        rec = _lives().start(url, req.clips_per_part, req.part_minutes,
+                             spec, language=req.language)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return rec.snapshot()
+
+
+@app.get("/api/live")
+async def live_status() -> dict:
+    return _lives().status()
+
+
+@app.post("/api/live/{live_id}/stop")
+async def live_stop(live_id: str) -> dict:
+    rec = _lives().stop(live_id)
+    if rec is None:
+        raise HTTPException(404, "No such live")
+    return rec.snapshot()
+
+
+@app.post("/api/live/{live_id}/delete")
+async def live_delete(live_id: str) -> dict:
+    if not _lives().delete(live_id):
+        raise HTTPException(409, "That live is still recording, or does not exist.")
+    return {"deleted": live_id}
+
+
+@app.post("/api/live/{live_id}/process-parts")
+async def live_process_parts(live_id: str) -> dict:
+    """Cut clips from every recorded part that never got a job — for a live
+    that was interrupted, and for parts that arrived after the last poll."""
+    try:
+        made = await asyncio.to_thread(_lives().process_remaining_parts, live_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"made": made}
+
+
+@app.get("/api/stats/month")
+async def stats_month() -> dict:
+    """This month so far: videos run, clips made, lives recorded, and clips
+    published per platform. From the runs on disk and the lives ledger — the
+    counts ViralClip's dashboard shows, from the data this app already keeps.
+    A clip counts as published on a platform when the app recorded the upload
+    (YouTube) or a share (see the share flow)."""
+    months_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                 "julio", "agosto", "septiembre", "octubre", "noviembre",
+                 "diciembre"]
+    now = datetime.now(timezone.utc)
+    start = datetime(now.year, now.month, 1, tzinfo=timezone.utc).timestamp()
+    await asyncio.to_thread(STORE.restore)
+    videos = 0
+    clips = 0
+    live_jobs = 0
+    published: dict = {}
+    for job in STORE.jobs():
+        if job.created_at < start:
+            continue
+        videos += 1
+        if job.live_id:
+            live_jobs += 1
+        for c in job.clips:
+            clips += 1
+            yt = c.get("youtube") or {}
+            if yt.get("video_id") or yt.get("url"):
+                published["youtube"] = published.get("youtube", 0) + 1
+            for p in (c.get("shared_to") or []):
+                published[str(p)] = published.get(str(p), 0) + 1
+    try:
+        lives = [r for r in _lives().status()["lives"]
+                 if (r.get("started_at") or 0) >= start]
+    except Exception:
+        lives = []
+    return {
+        "month": now.strftime("%Y-%m"),
+        "label": f"{months_es[now.month - 1]} {now.year}",
+        "videos": videos,
+        "clips": clips,
+        "lives": len(lives),
+        "live_clips": live_jobs,
+        "published": published,
+    }
 
 
 @app.post("/api/jobs/{job_id}/seo")
@@ -1650,7 +1930,11 @@ async def get_clip(job_id: str, filename: str) -> FileResponse:
     if not path.exists():
         raise HTTPException(404, "No such clip")
 
-    return FileResponse(path, media_type="video/mp4", filename=safe)
+    # A cover image is a JPEG, not a video: serve it as one, so an <img> and
+    # a download both get the right type.
+    import mimetypes
+    media = mimetypes.guess_type(safe)[0] or "video/mp4"
+    return FileResponse(path, media_type=media, filename=safe)
 
 
 # --- clip editing ---------------------------------------------------------
@@ -1711,7 +1995,8 @@ def _strip_audio(path: Path) -> None:
 # `edit_overrides`. Everything else a clip renders with stays the job's spec.
 _EDIT_OVERRIDE_FIELDS = ("captions", "caption_font", "caption_color",
                          "caption_text_color", "caption_position",
-                         "layout", "aspect_ratio", "outro")
+                         "layout", "aspect_ratio", "outro",
+                         "title_intro", "title_intro_seconds")
 
 
 def _edit_spec(job, overrides: Optional[dict] = None) -> LayoutSpec:
@@ -1844,6 +2129,84 @@ async def fix_captions(job_id: str, filename: str, req: CaptionFixRequest) -> di
     return updated or {}
 
 
+class CoverRequest(BaseModel):
+    """The cover (thumbnail) for a clip: the second to freeze and the text
+    on it. Both optional — an empty text is a plain still."""
+    second: float = 0.5
+    text: str = ""
+
+
+@app.post("/api/jobs/{job_id}/clips/{filename}/cover")
+async def clip_cover(job_id: str, filename: str, req: CoverRequest) -> dict:
+    """Make the cover image for a clip: a still from `second`, with `text`
+    drawn on it in the subtitle style. Saved next to the clip as
+    `<clip>-portada.jpg`, so the library can show it and an upload can use it
+    as the thumbnail. A re-render of the clip does not move the cover — make
+    it again from the new file if the picture changed."""
+    from shorts_generator import captions as caption_styles
+    job = _job_or_404(job_id)
+    clip = STORE.clip(job, os.path.basename(filename))
+    if clip is None:
+        raise HTTPException(404, "No such clip")
+    path = _clip_path(job, clip["file"])
+    if not path.exists():
+        raise HTTPException(404, "That clip is not on disk any more.")
+
+    duration = clip.get("duration")
+    if not duration:
+        try:
+            out = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", str(path)], capture_output=True, text=True,
+                timeout=30)
+            duration = float(out.stdout.strip())
+        except Exception:
+            duration = 0
+    second = max(0.0, min(float(req.second or 0.0), max(0.0, float(duration) - 0.1)))
+    text = (req.text or "").strip()[:80]
+
+    stem = path.stem
+    cover_name = f"{stem}-portada.jpg"
+    cover_path = path.with_name(cover_name)
+
+    def _make():
+        import tempfile
+        font = caption_styles.font_file("clipzonerd")
+        vf = f"scale=720:-2"
+        if text and font is not None:
+            # Through a file, not the command line: a title with a colon or a
+            # quote in it would break drawtext's own escaping.
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                            encoding="utf-8") as f:
+                f.write(text)
+                text_file = f.name
+            # The subtitle look: the style's face, white on a dark box, big
+            # and centred, a quarter of the way down.
+            vf = (f"scale=720:-2,drawtext=fontfile={font}:textfile={text_file}:"
+                  f"fontsize=64:fontcolor=white:borderw=3:bordercolor=black:"
+                  f"box=1:boxcolor=black@0.55:boxborderw=14:"
+                  f"x=(w-text_w)/2:y=h*0.22")
+        cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{second:.2f}",
+               "-i", str(path), "-frames:v", "1", "-vf", vf,
+               "-q:v", "3", str(cover_path)]
+        subprocess.run(cmd, check=True, timeout=60)
+
+    try:
+        await asyncio.to_thread(_make)
+    except Exception as e:
+        raise HTTPException(500, f"Could not make that cover: {e}")
+    if not cover_path.exists():
+        raise HTTPException(500, "The cover did not come out.")
+
+    updated = STORE.replace_clip(job, clip["file"], {
+        "cover_file": cover_name,
+        "cover_url": f"/api/jobs/{job.id}/clips/{cover_name}",
+        "cover_second": second,
+        "cover_text": text,
+    }) or {}
+    return updated
+
+
 @app.post("/api/jobs/{job_id}/clips/{filename}/trim")
 async def trim_clip(job_id: str, filename: str, req: TrimRequest) -> dict:
     """Re-cut one clip at new timestamps, straight from the downloaded source.
@@ -1908,6 +2271,10 @@ class ClipEditRequest(BaseModel):
     layout: Optional[str] = None
     aspect_ratio: Optional[str] = None
     outro: Optional[bool] = None
+    # ClipZoneRD: the clip's title at the start, in the subtitle style, for
+    # its first seconds. None leaves the job's setting (on, 3s by default).
+    title_intro: Optional[bool] = None
+    title_intro_seconds: Optional[float] = None
     keep_copy: bool = False
 
 
@@ -2113,6 +2480,26 @@ def _editable_clip(job_id: str, filename: str):
     if not job.source_path or not os.path.exists(job.source_path):
         raise HTTPException(409, "The source video for this job is gone — re-run it to edit.")
     return job, clip
+
+
+@app.post("/api/jobs/{job_id}/more-moments")
+async def more_moments(job_id: str) -> dict:
+    """Cut the clips a short run did not get, from weaker moments.
+
+    A run hands back fewer clips than asked for when too few moments scored
+    55 or more, and it used to leave it at that with no explanation. This
+    re-picks from the moments the ranker already found, at a lower bar (45),
+    and renders the extra clips — no new ranking pass, so it costs only the
+    render. The page offers it when a run's shortfall says it came up short.
+    """
+    job = _job_or_404(job_id)
+    try:
+        added = await asyncio.to_thread(STORE.more_moments, job)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Could not cut more moments: {e}")
+    return {"added": added, "job": STORE.get(job_id).snapshot()}
 
 
 @app.get("/api/jobs/{job_id}/clips/{filename}/frame")
@@ -2333,6 +2720,34 @@ async def save_clip(job_id: str, filename: str, req: SaveClipRequest) -> dict:
     await asyncio.to_thread(shutil.copy2, src, dest)
     STORE.replace_clip(job, safe, {"saved_to": str(dest)})
     return {"saved": True, "path": str(dest), "folder": str(dest_dir)}
+
+
+@app.post("/api/jobs/{job_id}/clips/{filename}/download")
+async def download_clip(job_id: str, filename: str) -> dict:
+    """Copy a clip into the user's Downloads folder and say where it landed.
+
+    The native window (pywebview/WebView2) swallows <a download> clicks, so
+    the Download button asks the host for a Save dialog instead; when that is
+    unavailable it falls back to this: a plain copy into Downloads, which
+    always works because the server runs on the same PC as the files.
+    """
+    job = _job_or_404(job_id)
+    safe = os.path.basename(filename)
+    if STORE.clip(job, safe) is None:
+        raise HTTPException(404, "No such clip")
+    src = _clip_path(job, safe)
+    if not src.exists():
+        raise HTTPException(404, "That clip's file is missing.")
+    downloads = Path.home() / "Downloads"
+    downloads.mkdir(parents=True, exist_ok=True)
+    stem = Path(safe).stem
+    dest = downloads / safe
+    n = 1
+    while dest.exists():
+        dest = downloads / f"{stem}_{n}.mp4"
+        n += 1
+    await asyncio.to_thread(shutil.copy2, src, dest)
+    return {"downloaded": True, "path": str(dest)}
 
 
 

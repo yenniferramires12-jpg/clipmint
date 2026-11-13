@@ -1220,6 +1220,27 @@ label.fld > span a:hover { text-decoration: underline; }
 .clip .rank i.g-strong { color: var(--on-media-warn); }
 .clip .rank i.g-good { color: var(--on-media-2); }
 .clip .rank i.g-weak { color: #8d8d8d; }
+/* The viral score, loud on purpose: the number ViralClip puts on every card. */
+.clip .viral {
+  position: absolute;
+  right: 6px; top: 6px;
+  background: linear-gradient(120deg, var(--red), #ff6a00);
+  color: #fff;
+  border-radius: var(--pill);
+  padding: 3px 9px;
+  font: 800 11px/1.3 var(--font);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+/* The analysis tag under the title: what the moment is, in one phrase. */
+.clip .atag { margin: 2px 12px 0; }
+.clip .atag span {
+  display: inline-block;
+  background: var(--blue);
+  color: #fff;
+  border-radius: var(--pill);
+  padding: 2px 9px;
+  font: 700 11px/1.5 var(--font);
+}
 .clip .flag .need { color: var(--on-media-warn); }
 /* One line of chips, never more. They wrap, but the row is exactly one chip
    tall and clips the rest, so a chip that doesn't fit drops out whole instead
@@ -3099,3 +3120,67 @@ body.job-paused .spin { animation-play-state: paused; opacity: .4; }
   border: 1px solid var(--line); border-radius: var(--r-sm);
   font: 500 13px/1 var(--font);
 }
+
+/* --- Title intro + live recordings (v1.2.0) ------------------------------- */
+
+/* The seconds input that sits inside a checkbox label. */
+.mini-num {
+  width: 52px; padding: 4px 6px;
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 600 13px/1 var(--font);
+}
+.mini-num:focus { outline: 2px solid var(--blue); outline-offset: 0; }
+
+/* This month at a glance. */
+.month-strip { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; }
+.month-stat { color: var(--text-2); font-size: 13.5px; }
+.month-stat b { color: var(--text); font-size: 20px; font-variant-numeric: tabular-nums; }
+
+/* Live: the start row, the active card and the table of past lives. */
+.live-start { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.live-start #liveUrl {
+  flex: 1 1 280px; padding: 10px 12px;
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 500 14px/1.3 var(--font);
+}
+.live-every { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); font-size: 13px; }
+.live-active {
+  margin-top: 14px; padding: 14px;
+  border: 1px solid var(--red); border-radius: var(--r);
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+}
+.live-badge { display: flex; gap: 10px; align-items: center; font-weight: 700; }
+.live-title { margin-top: 8px; font: 700 16px/1.3 var(--font); }
+.live-link { display: block; margin-top: 2px; color: var(--text-2); font-size: 12.5px; word-break: break-all; }
+.live-elapsed { margin-top: 10px; display: flex; gap: 10px; align-items: baseline; }
+.live-elapsed-num { font: 800 30px/1 var(--font); font-variant-numeric: tabular-nums; }
+.live-elapsed-lbl { color: var(--text-2); font-size: 13px; }
+.live-parts { margin-top: 8px; color: var(--text-2); font-size: 13px; }
+.live-actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.live-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13.5px; }
+.live-table th, .live-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.live-table th { color: var(--text-2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.live-table .lt-title { font-weight: 700; }
+.live-table .lt-url { color: var(--text-2); font-size: 12px; word-break: break-all; }
+.live-table .lt-err { color: var(--err-ink); font-size: 12px; }
+
+/* --- Editor: Portada / Subtítulos tabs (v1.2.0) --------------------------- */
+.ed-tabs { display: flex; gap: 6px; margin: 10px 0; }
+.ed-tabs .chip { cursor: pointer; }
+.ed-cover { margin: 10px 0; }
+.ed-cover img {
+  display: block; width: 100%; max-width: 280px;
+  border-radius: var(--r-sm); border: 1px solid var(--line);
+}
+
+/* --- Share panel (v1.2.0) ------------------------------------------------- */
+.player.seo-on #share { display: none; }
+.player.share-on #share { display: block; }
+.share-platforms { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.share-platform { display: flex; gap: 8px; align-items: center; }
+.share-platform input { accent-color: var(--red); }
+.share-platform .sh-name { font-weight: 700; }
+.share-platform .sh-state { color: var(--text-2); font-size: 12.5px; }
+.share-platform .sh-state.ok { color: var(--ok-ink); }

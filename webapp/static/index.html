@@ -59,6 +59,8 @@ addEventListener("load", function () {
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.5 6.5 4.9 4.9M19.1 19.1l-1.6-1.6M17.5 6.5l1.6-1.6M4.9 19.1l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.7 8.7 0 1 0 11.1 11.1z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 7.5a6.4 6.4 0 0 1 0 9M4.8 4.8a10.2 10.2 0 0 0 0 14.4M19.2 4.8a10.2 10.2 0 0 1 0 14.4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="18" cy="5.5" r="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><circle cx="18" cy="18.5" r="2.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M8.2 10.8l7.6-4M8.2 13.2l7.6 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4.5h3.4v15H7zm6.6 0H17v15h-3.4z" fill="currentColor"/></symbol>
   <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9.5h3.6L12 5.5v13L7.6 14.5H4z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.6 7.6 0 0 1 0 11" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></symbol>
   <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.6L12 5.5v13L7.6 14.5H4z" fill="currentColor"/><path d="M16 9.5l5 5m0-5l-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -142,6 +144,7 @@ addEventListener("load", function () {
     <a class="g-item active" data-go="secCreate"><svg><use href="#i-spark"/></svg><span>Create</span></a>
     <a class="g-item" data-go="secLayout"><svg><use href="#i-film"/></svg><span>What to make</span></a>
     <a class="g-item" data-go="results"><svg><use href="#i-play"/></svg><span>Your clips</span><i class="g-count hidden" id="gCount"></i></a>
+    <a class="g-item" data-go="secLive"><svg><use href="#i-live"/></svg><span>Live</span><i class="g-count hidden" id="gLiveCount"></i></a>
     <div class="g-div"></div>
     <a class="g-item" id="gSettings"><svg><use href="#i-gear"/></svg><span>Settings</span></a>
     <a class="g-item" id="gFolder"><svg><use href="#i-folder"/></svg><span>Clips folder</span></a>
@@ -277,6 +280,10 @@ addEventListener("load", function () {
             </div>
           </div>
           <div class="ar-row">
+            <span class="ar-label">How many clips. Blank means from your words, or 10</span>
+            <label class="dur-exact">Clips <input type="number" id="numClips" min="1" max="30" step="1" placeholder="auto"></label>
+          </div>
+          <div class="ar-row">
             <span class="ar-label">Framing. How the clip is laid out</span>
             <div class="chipbar wrap" id="layoutBar">
               <button class="chip on" data-layout="">Auto</button>
@@ -381,7 +388,8 @@ addEventListener("load", function () {
             <!-- One line per string: translation matches whole text nodes. -->
             <label class="check"><input type="checkbox" id="edPauses" checked><span>Cut quiet pauses and &ldquo;um&rdquo;s. A pause with sound in it &mdash; a laugh, the game &mdash; stays <em class="said hidden" data-said="cut_pauses">set by your words</em></span></label>
             <label class="check"><input type="checkbox" id="edPunch" checked><span>Punch in on the lines said with emphasis <em class="said hidden" data-said="punch_ins">set by your words</em></span></label>
-            <label class="check"><input type="checkbox" id="edTitle"><span>Keep the clip&rsquo;s title across the top the whole time, instead of the hook line for the first seconds <em class="said hidden" data-said="title_on_screen">set by your words</em></span></label>
+            <label class="check"><input type="checkbox" id="edTitleScreen"><span>Keep the clip&rsquo;s title across the top the whole time, instead of the hook line for the first seconds <em class="said hidden" data-said="title_on_screen">set by your words</em></span></label>
+            <label class="check"><input type="checkbox" id="edTitleIntro" checked><span>Show the clip&rsquo;s title at the start, in the subtitle style, for <input type="number" id="edTitleIntroSecs" min="1" max="10" step="1" value="3" class="mini-num" aria-label="Seconds the title stays up"> seconds — then it&rsquo;s gone <em class="said hidden" data-said="title_intro">set by your words</em></span></label>
             <label class="check"><input type="checkbox" id="edEmoji"><span>Pop an emoji on words like &ldquo;insane&rdquo;, &ldquo;money&rdquo; or &ldquo;no way&rdquo; <em class="said hidden" data-said="emoji">set by your words</em></span></label>
             <label class="check"><input type="checkbox" id="edBroll"><span>Stock B-roll over lines that name something you can film. Never on streams <em class="said hidden" data-said="broll">set by your words</em></span></label>
             <label class="check hidden" id="edLogoRow"><input type="checkbox" id="edLogo" checked><span>Put my logo in the corner <em class="said hidden" data-said="logo">set by your words</em></span></label>
@@ -464,6 +472,10 @@ addEventListener("load", function () {
         <button class="btn primary sm" id="retryBtn"><span id="retryLabel">Try again</span></button>
         <span class="phint" id="retryHint"></span>
       </div>
+      <div class="prow hidden" id="shortfallRow">
+        <button class="btn primary sm" id="moreMomentsBtn">Buscar más momentos</button>
+        <span class="phint" id="shortfallHint"></span>
+      </div>
       <details class="logwrap">
         <summary>Show the log</summary>
         <div class="log" id="log"></div>
@@ -534,6 +546,70 @@ addEventListener("load", function () {
         <p>No clips match that.</p>
         <button class="btn ghost sm" id="libReset">Clear the filters</button>
       </div>
+    </section>
+
+    <!-- this month, at a glance -->
+    <section class="panel" id="secMonth">
+      <div class="p-head">
+        <h2>Este mes</h2>
+        <span class="p-hint" id="monthLabel"></span>
+      </div>
+      <div class="month-strip" id="monthStrip">
+        <span class="month-stat"><b id="monthVideos">–</b> videos</span>
+        <span class="month-stat"><b id="monthClips">–</b> clips</span>
+        <span class="month-stat"><b id="monthLives">–</b> lives grabados</span>
+        <span class="month-stat"><b id="monthLiveClips">–</b> clips de lives</span>
+        <span class="month-stat" id="monthPublished"></span>
+      </div>
+    </section>
+
+    <!-- live recordings: record a stream, clips while it airs -->
+    <section class="panel" id="secLive">
+      <div class="p-head">
+        <h2><svg><use href="#i-live"/></svg>Clips de un Live</h2>
+        <span class="p-hint">Graba el live en esta PC y los clips van saliendo mientras transmite</span>
+      </div>
+      <p class="lead">Pega el enlace del live y pulsa Empezar. La app graba el stream
+        en partes y corta clips de cada parte mientras sigue en vivo — no hay
+        que esperar a que termine. Funciona con YouTube, Kick, Twitch, TikTok
+        y Facebook. Si el live se cae o termina, lo grabado hasta ahí se queda.</p>
+
+      <div class="live-start">
+        <input type="text" id="liveUrl" autocomplete="off" spellcheck="false"
+               placeholder="Link del Live (YouTube, TikTok, Twitch, Kick, Facebook…)">
+        <label class="live-every">Sacar
+          <input type="number" id="liveClipsPer" min="1" max="10" step="1" value="2" class="mini-num">
+          clips cada
+          <input type="number" id="liveEveryMin" min="1" max="30" step="1" value="5" class="mini-num">
+          minutos</label>
+        <button class="btn primary" id="liveStart">Empezar</button>
+      </div>
+      <p class="hint" id="liveErr"></p>
+
+      <!-- the live in progress -->
+      <div class="live-active hidden" id="liveActive">
+        <div class="live-badge"><span class="dot-live">EN VIVO</span><span id="liveStatus">Grabando…</span></div>
+        <div class="live-title" id="liveTitle"></div>
+        <a class="live-link" id="liveLink" href="#" target="_blank" rel="noopener"></a>
+        <div class="live-elapsed"><span class="live-elapsed-num" id="liveElapsed">00:00:00</span><span class="live-elapsed-lbl">Tiempo grabado</span></div>
+        <div class="live-parts" id="liveParts"></div>
+        <div class="live-actions">
+          <button class="btn ghost sm" id="liveStop">Parar la grabación</button>
+          <button class="btn ghost sm" id="liveProcess">Cortar clips de las partes que faltan</button>
+        </div>
+      </div>
+
+      <div id="liveClipsWrap" class="hidden">
+        <div class="p-head tight"><h2>Clips de este Live</h2></div>
+        <div class="runs" id="liveClips"></div>
+      </div>
+
+      <div class="p-head tight"><h2>Tus Lives</h2></div>
+      <table class="live-table" id="liveTable">
+        <thead><tr><th>Live</th><th>Estado</th><th>Clips</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="liveTableBody"></tbody>
+      </table>
+      <p class="hint hidden" id="liveEmpty">Todavía no has grabado ningún live.</p>
     </section>
 
     <!-- help -->
@@ -675,6 +751,16 @@ addEventListener("load", function () {
       <button class="qbtn" data-open="google-permissions">Withdraw access at Google</button>
     </div>
     <div id="ytuMsg"></div>
+  </div>
+
+  <div class="d-sec">
+    <h3>Conectar cuentas</h3>
+    <p class="hint" style="margin-top:0">Conecta Facebook, Instagram y TikTok para
+      compartir un clip con un clic, con su título, descripción y hashtags. Cada
+      plataforma necesita una app propia creada en su portal de desarrolladores;
+      la app nunca ve tu contraseña, solo guarda el permiso para publicar.</p>
+    <div id="shareAccounts"></div>
+    <div id="shareMsg2"></div>
   </div>
 
   <div class="d-sec">
@@ -830,6 +916,7 @@ addEventListener("load", function () {
         <button class="rbtn hidden" id="pFrameBtn" title="Move the frame or the captions (R)"><svg><use href="#i-frame"/></svg><span>Frame</span></button>
         <button class="rbtn" id="pEditBtn" title="Editar título, subtítulos y diseño (E)"><svg><use href="#i-gear"/></svg><span>Editar</span></button>
         <button class="rbtn" id="pSeoBtn" title="Title, description and tags (B)"><svg><use href="#i-spark"/></svg><span>Boost</span></button>
+        <button class="rbtn" id="pShareBtn" title="Compartir en YouTube, Facebook, Instagram y TikTok"><svg><use href="#i-share"/></svg><span>Compartir</span></button>
         <button class="rbtn" id="pSave" title="Save to your folder"><svg><use href="#i-save"/></svg><span>Save</span></button>
         <a class="rbtn" id="pDownload" download title="Download"><svg><use href="#i-download"/></svg><span>Download</span></a>
         <button class="rbtn" id="pShow" title="Show this file on your PC (F)"><svg><use href="#i-folder"/></svg><span>Show file</span></button>
@@ -858,6 +945,33 @@ addEventListener("load", function () {
       <p class="hint">Every box here is yours to rewrite. Saving keeps your wording and
         renames the file on your PC to match the title.</p>
       <div id="seoMsg"></div>
+    </div>
+
+    <!-- share panel: one click to the platforms she chose, with the clip's
+         own title, description and hashtags carried over -->
+    <div class="seo share" id="share">
+      <div class="t-head">
+        <h3><svg><use href="#i-share"/></svg>Compartir este clip</h3>
+        <button class="ibtn sm" id="shareClose"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <p class="hint">Publica el clip con su título, descripción y hashtags — los
+        mismos que la app ya escribió para él. Puedes cambiarlos aquí antes de publicar.</p>
+      <label class="ed-fld"><span>Título</span>
+        <input type="text" id="shTitle" maxlength="100" autocomplete="off">
+      </label>
+      <label class="ed-fld"><span>Descripción sugerida</span>
+        <textarea id="shDesc" rows="3" spellcheck="true"></textarea>
+      </label>
+      <label class="ed-fld"><span>Hashtags</span>
+        <input type="text" id="shTags" autocomplete="off"
+               placeholder="#gaming #gta #clip">
+      </label>
+      <div class="share-platforms" id="sharePlatforms"></div>
+      <p class="hint" id="shareNote"></p>
+      <div class="t-actions">
+        <button class="btn primary" id="shareGo">Publicar</button>
+      </div>
+      <div id="shareMsg"></div>
     </div>
 
     <!-- caption fix panel -->
@@ -918,23 +1032,53 @@ addEventListener("load", function () {
         <input type="text" id="edHook" maxlength="300" autocomplete="off">
       </label>
 
+      <!-- Portada (cover) and Subtítulos (captions) are the two tabs
+           ViralClip's editor shows; Cámara (layout) and Formato sit below,
+           common to both. -->
+      <div class="ed-tabs">
+        <button class="chip on" id="edTabCover" type="button">Portada</button>
+        <button class="chip" id="edTabSubs" type="button">Subtítulos</button>
+      </div>
+
+      <div id="edTabCoverPane">
+        <div class="ed-grid">
+          <label class="ed-fld"><span>Segundo de la portada</span>
+            <input type="number" id="edCoverSecond" min="0" step="0.5" value="0.5">
+          </label>
+          <label class="ed-fld"><span>Texto de la portada</span>
+            <input type="text" id="edCoverText" maxlength="80" autocomplete="off"
+                   placeholder="El título del clip">
+          </label>
+        </div>
+        <div class="ed-cover">
+          <img id="edCoverImg" class="hidden" alt="Portada del clip">
+          <p class="hint" id="edCoverHint">Elige el segundo y el texto, y pulsa Generar portada para verla.</p>
+        </div>
+        <button class="btn ghost sm" id="edCoverGo" type="button">Generar portada</button>
+      </div>
+
+      <div id="edTabSubsPane" class="hidden">
+        <div class="ed-grid">
+          <label class="ed-fld"><span>Estilo de subtítulos</span>
+            <select id="edCaptions"></select>
+          </label>
+          <label class="ed-fld"><span>Fuente de subtítulos</span>
+            <select id="edFont"></select>
+          </label>
+          <label class="ed-fld"><span>Palabra que suena</span>
+            <span class="ed-color"><select id="edHiColor"></select><input type="color" id="edHiPick" value="#FFE14D" title="Elegir otro color"></span>
+          </label>
+          <label class="ed-fld"><span>Otras palabras</span>
+            <span class="ed-color"><select id="edTextColor"></select><input type="color" id="edTextPick" value="#FFFFFF" title="Elegir otro color"></span>
+          </label>
+          <label class="ed-fld"><span>Posición de subtítulos</span>
+            <select id="edPos"></select>
+          </label>
+        </div>
+      </div>
+
       <div class="ed-grid">
-        <label class="ed-fld"><span>Estilo de subtítulos</span>
-          <select id="edCaptions"></select>
-        </label>
-        <label class="ed-fld"><span>Fuente de subtítulos</span>
-          <select id="edFont"></select>
-        </label>
-        <label class="ed-fld"><span>Palabra que suena</span>
-          <span class="ed-color"><select id="edHiColor"></select><input type="color" id="edHiPick" value="#FFE14D" title="Elegir otro color"></span>
-        </label>
-        <label class="ed-fld"><span>Otras palabras</span>
-          <span class="ed-color"><select id="edTextColor"></select><input type="color" id="edTextPick" value="#FFFFFF" title="Elegir otro color"></span>
-        </label>
-        <label class="ed-fld"><span>Posición de subtítulos</span>
-          <select id="edPos"></select>
-        </label>
-        <label class="ed-fld"><span>Diseño</span>
+        <label class="ed-fld"><span>Cámara</span>
           <select id="edLayout"></select>
         </label>
         <label class="ed-fld"><span>Formato</span>
@@ -943,6 +1087,7 @@ addEventListener("load", function () {
       </div>
 
       <label class="check"><input type="checkbox" id="edOutro"><span>Añadir el outro animado al final</span></label>
+      <label class="check"><input type="checkbox" id="edTitleIntroClip"><span>Mostrar el título al inicio, en el estilo de los subtítulos, durante <input type="number" id="edTitleIntroClipSecs" min="1" max="10" step="1" value="3" class="mini-num" aria-label="Segundos que el título se ve al inicio"> segundos</span></label>
       <label class="check"><input type="checkbox" id="edKeepCopy"><span>Guardar como una copia nueva (conservar el clip original)</span></label>
 
       <div class="t-actions">

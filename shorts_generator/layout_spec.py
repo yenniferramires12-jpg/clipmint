@@ -87,7 +87,7 @@ LAYOUTS = ("stacked", "facetrack", "center")
 # The LayoutSpec fields that describe the edit rather than the framing.
 EDIT_FIELDS = ("captions", "caption_font", "caption_color", "caption_text_color",
                "caption_position", "cut_pauses", "punch_ins", "emoji", "broll", "logo",
-               "title_on_screen")
+               "title_on_screen", "title_intro", "title_intro_seconds")
 
 
 QUALITIES = ("best", "1080", "720")
@@ -208,6 +208,12 @@ class LayoutSpec:
     # The clip's title across the top for the whole clip, instead of the hook
     # line for its first seconds. Shown even with captions off.
     title_on_screen: bool = False
+    # ClipZoneRD: the clip's title at the start, in the subtitle preset's
+    # style, for its first seconds only, then gone. On by default -- Yennifer
+    # asked for it -- and off per job or per clip from the UI. title_on_screen
+    # (the whole clip) wins over this one when both are on.
+    title_intro: bool = True
+    title_intro_seconds: float = 3.0
     # Which of the edit settings above the prompt's own words decided, so the
     # interface can show the words won rather than silently ignoring them.
     edit_from_words: List[str] = field(default_factory=list)
@@ -265,8 +271,12 @@ class LayoutSpec:
         self.caption_text_color = caption_styles.normalise_colour(self.caption_text_color)
         self.caption_position = caption_styles.normalise_position(self.caption_position)
         for name in ("cut_pauses", "punch_ins", "emoji", "broll", "logo", "title_on_screen",
-                     "outro"):
+                     "title_intro", "outro"):
             setattr(self, name, bool(getattr(self, name)))
+        try:
+            self.title_intro_seconds = max(1.0, min(10.0, float(self.title_intro_seconds)))
+        except (TypeError, ValueError):
+            self.title_intro_seconds = 3.0
         self.edit_from_words = [f for f in (self.edit_from_words or [])
                                 if f in EDIT_FIELDS]
         self.asks = _clean_asks(self.asks)
@@ -388,6 +398,8 @@ class LayoutSpec:
             bits.append("your logo")
         if self.title_on_screen:
             bits.append("title on top")
+        if self.title_intro:
+            bits.append(f"title at the start ({self.title_intro_seconds:g}s)")
         return ", ".join(bits)
 
     def _describe_layout(self) -> str:
@@ -653,6 +665,8 @@ _EDIT_PHRASES = [
     (r"\bb[\s-]?roll\b|\bstock footage\b", "broll", True),
     (r"\b(?:no|without|hide) (?:my |the )?(?:logo|watermark)\b", "logo", False),
     (r"\b(?:add|with|put|show) (?:my |the )?(?:logo|watermark)\b", "logo", True),
+    (r"\b(?:no|without|hide) (?:a |the )?titles? (?:at|in) (?:the )?(?:start|beginning)\b"
+     r"|\bno title intro\b", "title_intro", False),
     (r"\b(?:no|without|hide) (?:a |the )?titles? (?:on screen|on top|at the top)\b"
      r"|\bno title card\b", "title_on_screen", False),
     (r"\btitles? (?:at|on|across|in) (?:the )?(?:top|front|start|beginning)\b"
@@ -684,6 +698,7 @@ def _parse_edit(p: str, spec: LayoutSpec) -> tuple:
             setattr(spec, name, value)
             label = {"cut_pauses": "cut pauses and fillers", "punch_ins": "punch-ins",
                      "emoji": "emoji", "broll": "B-roll", "logo": "your logo",
+                     "title_intro": "title at the start",
                      "title_on_screen": "title across the top"}[name]
             spec.notes.append(f"{label} → {'on' if value else 'off'}")
         found.add(name)

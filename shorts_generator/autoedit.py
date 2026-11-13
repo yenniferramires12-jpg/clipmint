@@ -147,6 +147,12 @@ class Options:
     # hook line for its first seconds. Asked for by a tester who wanted "a
     # sort of title at the front" and found no way to say so.
     title_on_screen: bool = False
+    # ClipZoneRD: the clip's title at the start, in the subtitle preset's
+    # style, for its first seconds only. On by default -- Yennifer asked for
+    # it -- and off per job or per clip from the UI. title_on_screen wins
+    # over this one when both are on.
+    title_intro: bool = True
+    title_intro_seconds: float = 3.0
 
     @property
     def needs_words(self) -> bool:
@@ -192,6 +198,9 @@ def options_from_spec(spec, kind: Optional[str] = None) -> Options:
         logo_corner=brand.corner(),
         hook_replay=bool(getattr(spec, "hook_replay", False)),
         title_on_screen=bool(getattr(spec, "title_on_screen", False)),
+        title_intro=bool(getattr(spec, "title_intro", True)),
+        title_intro_seconds=max(1.0, min(10.0, float(
+            getattr(spec, "title_intro_seconds", 3.0) or 3.0))),
     )
 
 
@@ -222,6 +231,9 @@ class Plan:
     # Whether `hook` is the clip's title, kept up for the whole clip, rather
     # than the hook line for its first seconds.
     hook_is_title: bool = False
+    # When the hook is a title shown only at the start, how long it stays up
+    # (clip seconds). None means the title stays the whole clip.
+    title_seconds: Optional[float] = None
     # Where someone moved the captions to, as a fraction of the frame's
     # height (framing.caption_y), or None for the layout's own place.
     caption_y: Optional[float] = None
@@ -555,7 +567,7 @@ def analyse(path: str, highlight: Dict, opts: Options,
 
     plan.words = remap_words(spoken, plan.keeps) if plan.cut else spoken
     plan.caption_words = remap_words(shown, plan.keeps) if plan.cut else shown
-    if opts.captions != captions.OFF or opts.title_on_screen:
+    if opts.captions != captions.OFF or opts.title_on_screen or opts.title_intro:
         seo = highlight.get("seo") or {}
         # The hook line rides with the captions; a title asked for by name is
         # shown even with captions off.
@@ -566,6 +578,15 @@ def analyse(path: str, highlight: Dict, opts: Options,
                 seo.get("title") or highlight.get("title") or ""))).strip(" |-")
             if title:
                 plan.hook, plan.hook_is_title = title, True
+        elif opts.title_intro:
+            # The title at the start only, in the subtitle style, for its
+            # first seconds. No title, no line: a clip without a title does
+            # not get a blank box.
+            title = re.sub(r"\s+", " ", re.sub(r"#\w+", "", str(
+                seo.get("title") or highlight.get("title") or ""))).strip(" |-")
+            if title:
+                plan.hook, plan.hook_is_title = title, True
+                plan.title_seconds = opts.title_intro_seconds
         peak, start = highlight.get("hook_peak"), highlight.get("start_time")
         if peak is not None and start is not None:
             at = float(peak) - float(start)
@@ -752,6 +773,11 @@ def hook_windows(plan: Plan, opts: Options) -> List[Tuple[float, float]]:
 
     length = plan.new_duration
     if plan.hook_is_title:
+        if plan.title_seconds is not None:
+            # A title at the start only: up for its first seconds, then gone.
+            # Never replayed on a cold open's slice -- the title belongs to
+            # the opening, not to the loudest moment.
+            return [(0.0, min(float(plan.title_seconds), length))]
         # Up the whole time, so a cold open's replayed slice carries it too.
         return [(0.0, length)]
     windows = [(0.0, min(captions.HOOK_SECONDS, length))]
@@ -775,15 +801,27 @@ def render(plan: Plan, opts: Options) -> Dict:
         style = opts.captions
         words = plan.caption_words
         if style == captions.OFF and plan.hook_is_title:
-            # Captions off but a title asked for: the title alone, in the
-            # default style's face.
-            style, words = captions.DEFAULT, []
+            # Captions off but a title asked for: the title alone. A title
+            # at the start borrows the ClipZoneRD style (white type, red
+            # accent, night-blue edge) -- the subtitle look Yennifer asked
+            # for; a title kept up the whole clip keeps the default face.
+            style = "clipzonerd" if plan.title_seconds is not None else captions.DEFAULT
+            words = []
         if style != captions.OFF and (words or plan.hook):
             y = plan.caption_height(opts)
+            # A title at the start is drawn at the subtitle style's own size
+            # -- the same size as the burned-in subtitles -- not the hook
+            # line's smaller one.
+            size_frac = 0.06
+            if plan.title_seconds is not None:
+                preset = captions.look(style, opts.caption_font, opts.caption_color,
+                                       opts.caption_text_color)
+                size_frac = float(preset.get("size") or 0.06) if preset else 0.06
             script = captions.build_ass(words, style, plan.width, plan.height, y,
                                         hook=plan.hook, hook_windows=hook_windows(plan, opts),
                                         hook_chars=(captions.TITLE_CHARS if plan.hook_is_title
                                                     else captions.HOOK_CHARS),
+                                        hook_size_frac=size_frac,
                                         font=opts.caption_font, colour=opts.caption_color,
                                         text_colour=opts.caption_text_color)
             if script:

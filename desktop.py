@@ -292,6 +292,51 @@ def _serve(port: int) -> None:
         traceback.print_exc()
 
 
+class _JSApi:
+    """The page's bridge to the native window, for what a web page cannot do.
+
+    The player runs inside pywebview (Edge WebView2 on Windows). WebView2
+    hands every download to the host, and pywebview does not handle them, so
+    an <a download> click is swallowed and nothing happens — the Download
+    button looked dead in v1.0.3 for exactly this reason. The button
+    therefore asks this bridge to show the native Save dialog and copy the
+    clip where the user picks it. In a real browser the bridge does not exist
+    and the anchor's own download is used instead.
+    """
+
+    def save_clip(self, job_id: str, filename: str) -> dict:
+        """Show a Save dialog for one clip; copy it where the user picks."""
+        try:
+            import shutil
+
+            from webapp.server import STORE, _clip_path
+
+            job = STORE.get(str(job_id))
+            if job is None:
+                return {"error": "No such job"}
+            safe = os.path.basename(str(filename))
+            if STORE.clip(job, safe) is None:
+                return {"error": "No such clip"}
+            src = _clip_path(job, safe)
+            if not src.exists():
+                return {"error": "That clip's file is missing."}
+
+            import webview
+
+            try:
+                picked = webview.windows[0].create_file_dialog(
+                    webview.SAVE_DIALOG, save_filename=safe)
+            except Exception as e:  # noqa: BLE001 - the page falls back
+                return {"error": f"Save dialog unavailable: {e}"}
+            if not picked:
+                return {"cancelled": True}
+            dest = picked[0]
+            shutil.copy2(src, dest)
+            return {"path": str(dest)}
+        except Exception as e:  # noqa: BLE001 - a bridge error must reach the page
+            return {"error": str(e)}
+
+
 def main() -> int:
     _prepare_environment()
     _attach_streams()   # after the chdir, so the log lands in the app's folder
@@ -349,7 +394,7 @@ def main() -> int:
     if webview is not None:
         try:
             webview.create_window(APP_NAME, url, width=1280, height=900,
-                                  min_size=(900, 640))
+                                  min_size=(900, 640), js_api=_JSApi())
             # http_server=False: we already run our own server.
             webview.start()
             return 0

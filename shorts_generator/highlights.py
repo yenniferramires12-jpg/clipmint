@@ -351,15 +351,19 @@ MAX_CLIP_SECONDS = 90         # reject anything the model returns above this
 MIN_SCORE = 55                # a moment under this is not a highlight: too weak to cut
 
 
-def strong(highlights: List[Dict]) -> List[Dict]:
+def strong(highlights: List[Dict], min_score: int = MIN_SCORE) -> List[Dict]:
     """The moments worth cutting, best first.
 
-    Everything under MIN_SCORE is discarded — a run would rather hand back
+    Everything under `min_score` is discarded — a run would rather hand back
     fewer clips than a weak one. Never empty when there is anything at all:
     the single best moment is kept, so a quiet video still yields one clip.
+
+    `min_score` is a parameter (rather than the module constant) so a run
+    that came back short can be asked for more moments at a lower bar, with
+    the user choosing to include the weaker ones — see more_moments.
     """
     ranked = sorted(highlights, key=_by_score, reverse=True)
-    kept = [h for h in ranked if _by_score(h) >= MIN_SCORE]
+    kept = [h for h in ranked if _by_score(h) >= min_score]
     return kept if kept else ranked[:1]
 CHUNK_SIZE_SECONDS = 1200       # 20-min chunks for long videos
 LONG_VIDEO_THRESHOLD = 1800     # chunk videos longer than 30 min
@@ -1164,7 +1168,7 @@ def _by_score(h: Dict) -> int:
 
 
 def pick(highlights: List[Dict], n: int,
-         asks: Optional[List[Dict]] = None) -> List[Dict]:
+         asks: Optional[List[Dict]] = None, min_score: int = MIN_SCORE) -> List[Dict]:
     """The `n` clips to cut, best first.
 
     Without groups, simply the top `n`. With a mixed request, each group's
@@ -1172,10 +1176,10 @@ def pick(highlights: List[Dict], n: int,
     video could not fill hands its places to the best of the rest, so a run
     never comes back short because one kind of moment was not in it.
     """
-    # Highlights only: weak moments (under MIN_SCORE) are discarded, so a
+    # Highlights only: weak moments (under `min_score`) are discarded, so a
     # run hands back fewer clips rather than a weak one. strong() keeps the
     # single best when nothing passes, so a run never comes back empty.
-    ranked = strong(highlights)
+    ranked = strong(highlights, min_score)
     if not asks:
         return ranked[:n]
     chosen: List[Dict] = []
@@ -1191,13 +1195,13 @@ def pick(highlights: List[Dict], n: int,
 
 
 def pool(highlights: List[Dict], size: int,
-         asks: Optional[List[Dict]] = None) -> List[Dict]:
+         asks: Optional[List[Dict]] = None, min_score: int = MIN_SCORE) -> List[Dict]:
     """The candidates worth a second look before pick(), best first.
 
     The top `size` overall, plus each group's own best few, so a group whose
     moments score lower than another's is still looked at before it is filled.
     """
-    ranked = strong(highlights)
+    ranked = strong(highlights, min_score)
     out = ranked[:size]
     for i, a in enumerate(asks or [], 1):
         out += [h for h in ranked if h.get("ask") == i and h not in out][:a["count"] * 2]

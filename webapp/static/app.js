@@ -1005,6 +1005,88 @@ $("ytuClientSave").onclick = () => {
 };
 $("ytuClientClear").onclick = () => saveYtuClient("");
 
+// ---- Connect accounts: Facebook, Instagram, TikTok (share) ------------
+//
+// Each platform needs its own developer app (the help text says where).
+// The app ID and secret are pasted once; Connect opens the platform's own
+// consent page in the real browser, and the token it hands back is what
+// publishes. TikTok drafts -- it never publishes straight to the feed,
+// because that needs an audit this app cannot pass.
+
+let shareAccounts = null;
+
+async function loadShareAccounts() {
+  try { shareAccounts = await api("/api/share/status"); } catch (_) { shareAccounts = null; }
+  renderShareAccounts();
+}
+
+function renderShareAccounts() {
+  const box = $("shareAccounts");
+  if (!box) return;
+  const st = (shareAccounts && shareAccounts.platforms) || {};
+  const help = (shareAccounts && shareAccounts.help) || {};
+  const names = { facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok" };
+  box.innerHTML = Object.keys(names).map((p) => {
+    const s = st[p] || {};
+    const acc = s.account || {};
+    const connected = !!s.connected;
+    return `<div class="kv" style="margin-bottom:14px">
+      <div><b>${names[p]}</b> — ${connected
+        ? `conectado: ${esc(acc.name || acc.id || "")}`
+        : esc(s.needs || "Sin conectar")}</div>
+      <div class="row" style="margin-top:6px">
+        ${connected
+          ? `<button class="btn ghost sm" data-share-disc="${p}">Desconectar</button>`
+          : `<button class="btn ghost sm" data-share-conn="${p}" ${s.has_client ? "" : "disabled"}>Conectar ${names[p]}</button>`}
+      </div>
+      <details class="logwrap" ${connected ? "" : "open"}>
+        <summary>Mi app de ${names[p]}</summary>
+        <p class="hint">${esc(help[p] || "")}</p>
+        <label class="fld"><span>App ID / Client key</span>
+          <input type="text" id="shClientId-${p}" autocomplete="off" spellcheck="false"></label>
+        <label class="fld"><span>App secret / Client secret</span>
+          <input type="password" id="shClientSecret-${p}" autocomplete="off" spellcheck="false"></label>
+        <div class="row"><button class="btn ghost sm" data-share-save="${p}">Guardar app</button></div>
+      </details>
+    </div>`;
+  }).join("") + `<p class="hint">TikTok se guarda como borrador en tu app — lo publicas tú
+    desde ahí. Publicar directo en TikTok necesita que TikTok audite la app, y una app que
+    solo corre en tu PC no pasa esa auditoría.</p>`;
+  box.querySelectorAll("[data-share-conn]").forEach((b) => {
+    b.onclick = async () => {
+      try {
+        await api(`/api/share/${b.dataset.shareConn}/connect`, json("POST", {}));
+        toast("Termina de conectar en tu navegador.");
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+  box.querySelectorAll("[data-share-disc]").forEach((b) => {
+    b.onclick = async () => {
+      try {
+        await api(`/api/share/${b.dataset.shareDisc}/disconnect`, json("POST", {}));
+        toast("Desconectado.");
+        loadShareAccounts();
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+  box.querySelectorAll("[data-share-save]").forEach((b) => {
+    b.onclick = async () => {
+      const p = b.dataset.shareSave;
+      const id = $(`shClientId-${p}`).value.trim();
+      const secret = $(`shClientSecret-${p}`).value.trim();
+      if (!id || !secret) { toast("Pega el App ID y el secret.", true); return; }
+      try {
+        await api(`/api/share/${p}/client`, json("POST", { client_id: id, secret }));
+        toast("App guardada. Ahora pulsa Conectar.");
+        loadShareAccounts();
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+}
+// The drawer opens on demand; refresh the accounts each time it does.
+const _openDrawer = openDrawer;
+openDrawer = () => { _openDrawer(); loadShareAccounts(); };
+
 // ---- the Upload box, under the YouTube boxes in Boost
 
 const YU_PREF = "clipmint.ytupload";
@@ -2461,6 +2543,11 @@ function durationSeconds() {
   if (exact) return Number(exact);
   return durationChoice ? Number(durationChoice) : null;
 }
+function numClipsValue() {
+  const v = ($("numClips") && $("numClips").value.trim()) || "";
+  const n = Number(v);
+  return v && n >= 1 && n <= 30 ? n : null;
+}
 function platName(p) {
   return { youtube: "YouTube", tiktok: "TikTok", facebook: "Facebook",
            instagram: "Instagram" }[String(p || "").toLowerCase()] || "YouTube";
@@ -2551,10 +2638,11 @@ const EDIT_KEY = PROFILE_ID === "main" ? "clipmint.edit" : `clipmint.edit.${PROF
 const EDIT_DEFAULT = { captions: "bold", caption_font: "", caption_color: "",
                        caption_text_color: "", caption_position: "auto",
                        cut_pauses: true, punch_ins: true,
-                       emoji: false, broll: false, logo: true, title_on_screen: false };
+                       emoji: false, broll: false, logo: true, title_on_screen: false,
+                       title_intro: true, title_intro_seconds: 3 };
 const EDIT_BOXES = { cut_pauses: "edPauses", punch_ins: "edPunch",
                      emoji: "edEmoji", broll: "edBroll", logo: "edLogo",
-                     title_on_screen: "edTitle" };
+                     title_on_screen: "edTitleScreen", title_intro: "edTitleIntro" };
 let editChoice = loadEditChoice();   // what the controls were set to
 let editSaid = [];                   // the fields the prompt's words decided
 let pexelsReady = false;             // whether a Pexels key is on file
@@ -2604,6 +2692,9 @@ function drawEdit(shown) {
     }
   }
   for (const [k, id] of Object.entries(EDIT_BOXES)) $(id).checked = !!e[k];
+  // The title-intro seconds sit inside the same label as its checkbox.
+  const secs = $("edTitleIntroSecs");
+  if (secs) secs.value = Math.max(1, Math.min(10, +e.title_intro_seconds || 3));
   document.querySelectorAll("[data-said]").forEach((el) =>
     el.classList.toggle("hidden", !editSaid.includes(el.dataset.said)));
   drawBrollHint();
@@ -2703,6 +2794,16 @@ for (const [field, id] of Object.entries(EDIT_BOXES)) {
     refreshPreview();
   };
 }
+
+// The seconds the title stays up at the start of a clip.
+$("edTitleIntroSecs").onchange = () => {
+  if (wordsHold("title_intro_seconds")) return;
+  editChoice.title_intro_seconds = Math.max(1, Math.min(10,
+    +$("edTitleIntroSecs").value || 3));
+  saveEditChoice();
+  drawEdit();
+  refreshPreview();
+};
 
 $("brollKey").onclick = () => {
   openDrawer();
@@ -2967,6 +3068,7 @@ async function run() {
       aspect_ratio: aspectChoice || null,
       content_kind: kindChoice || null,
       duration_seconds: durationSeconds(),
+      num_clips: numClipsValue(),
       monetize: $("monetize").checked,
       layout: layoutChoice || null,
       hook_replay: $("hookReplay").checked,
@@ -3044,6 +3146,45 @@ function offerRetry(s, made) {
     : `${failed} clip${failed > 1 ? "s" : ""} did not render. Only ${
         failed > 1 ? "those are" : "that one is"} rendered again.`;
   $("retryBtn").onclick = () => retryRun(s.id, mode === "clips");
+}
+
+// A run that came back short: fewer clips than were asked for, because too
+// few moments scored 55 or more. Say so plainly — the count was the whole
+// complaint — and offer the weaker moments it skipped, at a lower bar.
+function offerMoreMoments(s) {
+  const f = s.shortfall;
+  const show = !!(f && s.status === "done" && f.delivered < f.requested && s.source_on_disk);
+  $("shortfallRow").classList.toggle("hidden", !show);
+  if (!show) return;
+  $("shortfallHint").textContent =
+    `Pediste ${f.requested} clips y salieron ${f.delivered}: solo ${f.strong} de ` +
+    `${f.candidates} momentos puntuaron 55 o más. Los demás eran demasiado flojos para cortar.`;
+  $("moreMomentsBtn").onclick = async () => {
+    const d = await fetchMoreMoments(s.id, $("moreMomentsBtn"));
+    if (d && d.job) offerMoreMoments(d.job);
+  };
+}
+
+// Cut the clips a short run did not get, from the weaker moments it skipped.
+// Shared by the finish panel and the run header in the library.
+async function fetchMoreMoments(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const d = await api(`/api/jobs/${encodeURIComponent(id)}/more-moments`,
+                        json("POST", {}));
+    const added = (d.added || []).length;
+    await loadLibrary();
+    if (added) {
+      toast(`${added} clip${added > 1 ? "s" : ""} más, de momentos más flojos (45+).`);
+    } else {
+      toast("No quedó ningún momento más para cortar.", true);
+    }
+    return d;
+  } catch (e) {
+    toast(e.message, true);
+    if (btn) btn.disabled = false;
+    return null;
+  }
 }
 
 async function retryRun(id, clipsOnly) {
@@ -3208,6 +3349,7 @@ async function finish(s) {
 
   const made = (s.clips || []).filter((c) => c.url).length;
   offerRetry(s, made);
+  offerMoreMoments(s);
   if (s.error && !made) {
     showErr(s.error);
     return;
@@ -3254,6 +3396,224 @@ async function loadLibrary() {
   loadPerformance();
   return clips.length;
 }
+
+// ---------------------------------------------------------------- month
+//
+// This month at a glance: videos, clips, lives and clips published per
+// platform, from /api/stats/month.
+
+async function loadMonthStats() {
+  let d;
+  try { d = await api("/api/stats/month"); } catch (_) { return; }
+  $("monthLabel").textContent = d.label || "";
+  $("monthVideos").textContent = d.videos;
+  $("monthClips").textContent = d.clips;
+  $("monthLives").textContent = d.lives;
+  $("monthLiveClips").textContent = d.live_clips;
+  const pub = d.published || {};
+  const names = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook" };
+  const bits = Object.entries(pub).map(([p, n]) => `${n} en ${names[p] || p}`);
+  $("monthPublished").innerHTML = bits.length
+    ? `<b>${bits.join(" · ")}</b> publicados`
+    : `<b>0</b> publicados`;
+}
+loadMonthStats();
+
+// ---------------------------------------------------------------- live
+//
+// Record a live stream in parts and cut clips from each part while it airs.
+// One live at a time; the parts are normal jobs, so their clips land in the
+// library like any other run. The parts render with the same edit settings
+// as a run made by hand (see the start request).
+
+let liveState = null;       // last /api/live response
+let liveViewId = null;      // the live whose clips the section is showing
+let liveSeenParts = "";     // part job ids + clip count already reflected
+
+const LIVE_STATUS_ES = {
+  starting: "Empezando…", recording: "Grabando…", ended: "Terminado",
+  stopped: "Parado", error: "Error", interrupted: "Interrumpido",
+};
+
+function liveElapsed(secs) {
+  secs = Math.max(0, Math.floor(secs || 0));
+  const h = String(Math.floor(secs / 3600)).padStart(2, "0");
+  const m = String(Math.floor(secs / 60) % 60).padStart(2, "0");
+  const s = String(secs % 60).padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+async function loadLives() {
+  let d;
+  try { d = await api("/api/live"); } catch (_) { return; }
+  liveState = d;
+  drawLives();
+}
+
+function drawLives() {
+  const d = liveState;
+  if (!d) return;
+  const active = d.active;
+  const lives = d.lives || [];
+  const badge = $("gLiveCount");
+  badge.textContent = lives.length;
+  badge.classList.toggle("hidden", !lives.length);
+
+  // The live in progress: EN VIVO, the link, the big recorded-time clock,
+  // and which part is being cut right now.
+  const box = $("liveActive");
+  if (active) {
+    box.classList.remove("hidden");
+    $("liveStatus").textContent = LIVE_STATUS_ES[active.status] || active.status;
+    $("liveTitle").textContent = active.title || "Live sin título";
+    const link = $("liveLink");
+    link.textContent = active.url;
+    link.href = active.url;
+    $("liveElapsed").textContent = liveElapsed(
+      (active.ended_at || Date.now() / 1000) - (active.started_at || Date.now() / 1000));
+    const jobs = active.part_jobs || [];
+    $("liveParts").innerHTML = jobs.length
+      ? jobs.map((p) => `Parte ${p.part}: cortando ${active.clips_per_part} clip${active.clips_per_part > 1 ? "s" : ""}…`).join("<br>")
+      : "Grabando la primera parte…";
+    if (!liveViewId) liveViewId = active.id;
+  } else {
+    box.classList.add("hidden");
+  }
+
+  // "Tus Lives": Live | Estado | Clips | Fecha, Ver / Borrar.
+  const body = $("liveTableBody");
+  body.innerHTML = lives.map((r) => `
+    <tr>
+      <td><div class="lt-title">${esc(r.title || "Live sin título")}</div>
+        <div class="lt-url">${esc(r.url)}</div>
+        ${r.error ? `<div class="lt-err">${esc(r.error)}</div>` : ""}</td>
+      <td>${esc(LIVE_STATUS_ES[r.status] || r.status)}</td>
+      <td>${r.clips_count || 0}</td>
+      <td>${r.started_at ? new Date(r.started_at * 1000).toLocaleDateString() : ""}</td>
+      <td>
+        <button class="qbtn" data-liveview="${esc(r.id)}">Ver</button>
+        ${r.status === "recording" || r.status === "starting" ? "" :
+          `<button class="qbtn" data-livedel="${esc(r.id)}">Borrar</button>`}
+        ${r.status === "interrupted" ? `<button class="qbtn" data-liveproc="${esc(r.id)}">Cortar lo que falta</button>` : ""}
+      </td>
+    </tr>`).join("");
+  $("liveEmpty").classList.toggle("hidden", lives.length > 0);
+  body.querySelectorAll("[data-liveview]").forEach((b) => {
+    b.onclick = () => { liveViewId = b.dataset.liveview; drawLiveClips(); };
+  });
+  body.querySelectorAll("[data-livedel]").forEach((b) => {
+    b.onclick = async () => {
+      try {
+        await api(`/api/live/${encodeURIComponent(b.dataset.livedel)}/delete`, json("POST", {}));
+        toast("Live borrado. Los clips que salieron de él se quedan en la biblioteca.");
+        loadLives();
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+  body.querySelectorAll("[data-liveproc]").forEach((b) => {
+    b.onclick = async () => {
+      try {
+        const r = await api(`/api/live/${encodeURIComponent(b.dataset.liveproc)}/process-parts`, json("POST", {}));
+        toast(r.made ? `Se empezaron ${r.made} parte(s).` : "No quedaban partes sin cortar.");
+        loadLives(); loadLibrary();
+      } catch (e) { toast(e.message, true); }
+    };
+  });
+
+  drawLiveClips();
+}
+
+function drawLiveClips() {
+  const wrap = $("liveClipsWrap");
+  const live = (liveState && (liveState.lives || []).find((r) => r.id === liveViewId))
+    || (liveState && liveState.active);
+  if (!live || !(live.part_jobs || []).length) {
+    wrap.classList.add("hidden");
+    $("liveClips").innerHTML = "";
+    return;
+  }
+  const ids = new Set((live.part_jobs || []).map((p) => p.job_id));
+  const mine = clips.filter((c) => ids.has(c.job_id));
+  // A part job the library has not seen yet: fetch the library once, then
+  // draw again with the new clips. The key stops it looping.
+  const key = [...ids].sort().join(",") + ":" + mine.length;
+  if (key !== liveSeenParts) {
+    liveSeenParts = key;
+    loadLibrary().then(() => drawLiveClips());
+  }
+  wrap.classList.remove("hidden");
+  $("liveClips").innerHTML = mine.length
+    ? mine.map((c) => clipCard(c)).join("")
+    : `<p class="hint">Las partes se están cortando — los clips aparecen aquí en cuanto salen.</p>`;
+  wireCards($("liveClips"));
+}
+
+$("liveStart").onclick = async () => {
+  const url = $("liveUrl").value.trim();
+  if (!url) { $("liveErr").textContent = "Pega el enlace del live primero."; return; }
+  $("liveErr").textContent = "";
+  const btn = $("liveStart");
+  const per = Math.max(1, Math.min(10, +$("liveClipsPer").value || 2));
+  const every = Math.max(1, Math.min(30, +$("liveEveryMin").value || 5));
+  btn.disabled = true;
+  btn.textContent = "Empezando…";
+  try {
+    const d = await api("/api/live/start", json("POST", {
+      url,
+      clips_per_part: per,
+      part_minutes: every,
+      num_clips: per,
+      prompt: $("prompt").value,
+      language: $("spokenLang").value,
+      aspect_ratio: aspectChoice || null,
+      content_kind: kindChoice || null,
+      duration_seconds: durationSeconds(),
+      monetize: $("monetize").checked,
+      layout: layoutChoice || null,
+      hook_replay: $("hookReplay").checked,
+      ...editChoice,
+    }));
+    liveViewId = d.id;
+    $("liveUrl").value = "";
+    toast("Grabando el live.");
+    loadLives();
+  } catch (e) {
+    $("liveErr").textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Empezar";
+  }
+};
+
+$("liveStop").onclick = async () => {
+  const active = liveState && liveState.active;
+  if (!active) return;
+  try {
+    await api(`/api/live/${encodeURIComponent(active.id)}/stop`, json("POST", {}));
+    toast("Grabación parada. Lo grabado se queda, y sus clips siguen en la biblioteca.");
+    loadLives(); loadLibrary();
+  } catch (e) { toast(e.message, true); }
+};
+
+$("liveProcess").onclick = async () => {
+  const active = liveState && liveState.active;
+  if (!active) return;
+  try {
+    const r = await api(`/api/live/${encodeURIComponent(active.id)}/process-parts`, json("POST", {}));
+    toast(r.made ? `Se empezaron ${r.made} parte(s).` : "No quedaban partes sin cortar.");
+    loadLives(); loadLibrary();
+  } catch (e) { toast(e.message, true); }
+};
+
+// The recorded-time clock ticks every second; the list itself refreshes
+// every few seconds, which is often enough for part jobs and clip counts.
+setInterval(() => {
+  if (liveState && liveState.active) {
+    $("liveElapsed").textContent = liveElapsed(Date.now() / 1000 - liveState.active.started_at);
+  }
+}, 1000);
+setInterval(loadLives, 5000);
+loadLives();
 
 // Order inside a run. "Ranked" is the order the run was ranked in, which is
 // already best first; the others sort on one part of the scorecard, so a run
@@ -3357,6 +3717,20 @@ function cardFlags(c, seo, filed) {
     f.map((x) => `<span${x.cls ? ` class="${x.cls}"` : ""}>${esc(x.text)}</span>`).join("")}</div>`;
 }
 
+// The analysis tag on a clip card, from the data the ranker already wrote:
+// the score, the hook, the virality reason and whether it is a wordless
+// moment. One tag per clip, the strongest signal first.
+function analysisTag(c) {
+  const card = c.scorecard || null;
+  const hook = (card && card.parts || []).find((p) => p.key === "hook");
+  if (c.wordless) return "Momento emotivo";
+  if (c.score != null && c.score >= 85) return "Alta retención";
+  if (hook && hook.value >= 80) return "Gancho IA";
+  if (c.hook_sentence) return "Gancho IA";
+  if (card && card.reason) return "Idea clave";
+  return "";
+}
+
 function clipCard(c) {
   const i = c._i;
   const seo = c.seo || null;
@@ -3365,6 +3739,7 @@ function clipCard(c) {
   const sub = (seo && seo.hook_text) || c.hook_sentence
     || (c.start_time != null ? `${clock(c.start_time)} → ${clock(c.end_time)}` : "");
   const rank = c.rank || c.index;
+  const tag = analysisTag(c);
   // What the clip is filed under, on the card itself, so a clip labelled with
   // the wrong game is visible at a glance instead of only after upload.
   const filed = c.subject_override || (seo && seo.about && seo.about.subject) || "";
@@ -3373,6 +3748,7 @@ function clipCard(c) {
       <div class="thumb">
         <video src="${esc(c.url)}#t=0.5" preload="metadata" muted playsinline data-i="${i}"></video>
         <div class="veil"><span class="pbtn"><svg><use href="#i-play"/></svg></span></div>
+        ${c.score != null ? `<span class="viral" title="Puntaje viral">🔥 ${esc(c.score)}/100</span>` : ""}
         <span class="rank">${rank ? `#${esc(rank)}` : ""}${
           c.score != null ? `<i class="${card ? `g-${esc(card.grade.key)}` : ""}"
             title="${card ? esc(card.grade.label) : ""}">★ ${esc(c.score)}</i>` : ""}</span>
@@ -3383,6 +3759,7 @@ function clipCard(c) {
       </div>
       <div class="ct">${esc(title)}</div>
       <div class="cm">${esc(sub)}</div>
+      ${tag ? `<div class="atag"><span>${esc(tag)}</span></div>` : ""}
       ${card && card.parts.length ? `<div class="sc">${scoreBars(card)}${
         card.reason ? `<p class="sc-why" title="${esc(card.reason)}">${esc(card.reason)}</p>` : ""}</div>` : ""}
       <div class="cq">
@@ -3390,6 +3767,8 @@ function clipCard(c) {
         <button class="qbtn" data-copy="tags" data-i="${i}">Copy tags</button>` : ""}
         <button class="qbtn" data-show="${i}"
           title="${esc(c.path || c.file || "")}">Show file</button>
+        <button class="qbtn" data-edit="${i}">Editar</button>
+        <button class="qbtn" data-export="${i}">Exportar</button>
       </div>
     </div>`;
 }
@@ -3416,6 +3795,14 @@ function renderClips() {
     // Counted across the whole run, not the filtered view: the button rewrites
     // every clip in the run, so it must not promise less than it does.
     const missing = r.clips.filter((c) => !c.seo).length;
+    // A run that came back short says so on its own header, with the reason
+    // and the same "buscar más momentos" the finish panel offers.
+    const f = r.shortfall;
+    const shortNote = (f && f.delivered < f.requested) ? `
+          <div class="run-short">
+            <span>Pediste ${f.requested} clips · salieron ${f.delivered} — solo ${f.strong} de ${f.candidates} momentos puntuaron 55 o más.</span>
+            <button class="btn ghost sm" data-morerun="${esc(r.id)}">Buscar más momentos</button>
+          </div>` : "";
     return `
       <section class="run">
         <div class="run-head">
@@ -3425,6 +3812,7 @@ function renderClips() {
                 ? `${keep.length} of ${r.clips.length} clips`
                 : `${r.clips.length} clip${r.clips.length > 1 ? "s" : ""}`}
               · ${esc(whenMade(r.created_at))}</span>
+            ${shortNote}
           </div>
           <div class="run-actions">
             <button class="btn yt sm" data-ytrun="${esc(r.id)}"
@@ -3452,35 +3840,17 @@ function renderClips() {
     `${shown.length} of ${count} clip${count === 1 ? "" : "s"}`;
   $("libQClear").classList.toggle("hidden", !libQ);
 
-  $("clips").querySelectorAll(".clip").forEach((el) => {
-    el.onclick = () => openPlayer(+el.dataset.i);
-  });
-  // Clips restored from an older folder have no recorded length; the file
-  // itself knows, so fill it in as soon as the browser reads the header.
-  $("clips").querySelectorAll(".thumb video").forEach((v) => {
-    v.addEventListener("loadedmetadata", () => {
-      const c = clips[+v.dataset.i];
-      if (!c || c.duration != null || !isFinite(v.duration)) return;
-      c.duration = Math.round(v.duration * 10) / 10;
-      const tag = v.closest(".thumb").querySelector(".dur");
-      if (tag) tag.textContent = clock(c.duration);
-    }, { once: true });
-  });
-  $("clips").querySelectorAll("[data-copy]").forEach((b) => {
-    b.onclick = (e) => {
-      e.stopPropagation();
-      const c = clips[+b.dataset.i];
-      const seo = (c && c.seo) || {};
-      const what = b.dataset.copy;
-      copy(what === "title" ? seo.title : (seo.tags || []).join(", "),
-           what === "title" ? "Title copied" : "Tags copied");
-    };
-  });
-  $("clips").querySelectorAll("[data-show]").forEach((b) => {
-    b.onclick = (e) => { e.stopPropagation(); showClipFile(clips[+b.dataset.show]); };
-  });
+  // The per-card buttons, shared by the library and by "Clips de este Live":
+  // a card is a card wherever it sits.
+  wireCards($("clips"));
   $("clips").querySelectorAll("[data-ytrun]").forEach((b) => {
     b.onclick = () => openBulk(b.dataset.ytrun);
+  });
+  $("clips").querySelectorAll("[data-morerun]").forEach((b) => {
+    b.onclick = async () => {
+      const d = await fetchMoreMoments(b.dataset.morerun, b);
+      if (d && d.job) offerMoreMoments(d.job);
+    };
   });
   $("clips").querySelectorAll("[data-seorun]").forEach((b) => {
     b.onclick = () => writeSeoForRun(b.dataset.seorun, b, +b.dataset.missing === 0);
@@ -3498,6 +3868,48 @@ function renderClips() {
         toast(e.message, true);
       }
     };
+  });
+}
+
+function wireCards(root) {
+  root.querySelectorAll(".clip").forEach((el) => {
+    el.onclick = () => openPlayer(+el.dataset.i);
+  });
+  // Clips restored from an older folder have no recorded length; the file
+  // itself knows, so fill it in as soon as the browser reads the header.
+  root.querySelectorAll(".thumb video").forEach((v) => {
+    v.addEventListener("loadedmetadata", () => {
+      const c = clips[+v.dataset.i];
+      if (!c || c.duration != null || !isFinite(v.duration)) return;
+      c.duration = Math.round(v.duration * 10) / 10;
+      const tag = v.closest(".thumb").querySelector(".dur");
+      if (tag) tag.textContent = clock(c.duration);
+    }, { once: true });
+  });
+  root.querySelectorAll("[data-copy]").forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const c = clips[+b.dataset.i];
+      const seo = (c && c.seo) || {};
+      const what = b.dataset.copy;
+      copy(what === "title" ? seo.title : (seo.tags || []).join(", "),
+           what === "title" ? "Title copied" : "Tags copied");
+    };
+  });
+  root.querySelectorAll("[data-show]").forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); showClipFile(clips[+b.dataset.show]); };
+  });
+  // Editar opens the player on that clip with the editor already open;
+  // Exportar downloads the clip (see downloadClip).
+  root.querySelectorAll("[data-edit]").forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      openPlayer(+b.dataset.edit);
+      toggleEdit();
+    };
+  });
+  root.querySelectorAll("[data-export]").forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); downloadClip(clips[+b.dataset.export]); };
   });
 }
 
@@ -3624,7 +4036,7 @@ function editSummary(c) {
 
 function closePlayer() {
   body.classList.remove("player-on");
-  $("player").classList.remove("trim-on", "seo-on", "cap-on", "edit-on");
+  $("player").classList.remove("trim-on", "seo-on", "cap-on", "edit-on", "share-on");
   closeFrame();
   vid.pause();
   feedbackMaybeAsk();
@@ -4101,13 +4513,138 @@ function toggleSeo() {
   const p = $("player");
   if (p.classList.contains("seo-on")) { p.classList.remove("seo-on"); return; }
   if (!clips[cur]) return;
-  p.classList.remove("trim-on", "cap-on", "edit-on");
+  p.classList.remove("trim-on", "cap-on", "edit-on", "share-on");
   closeFrame();
   renderSeo();
   p.classList.add("seo-on");
 }
 $("pSeoBtn").onclick = toggleSeo;
 $("seoClose").onclick = () => $("player").classList.remove("seo-on");
+
+// ---------------------------------------------------------------- share
+//
+// One click to the platforms she chose, with the clip's own title,
+// description and hashtags carried over. YouTube goes through its own
+// upload endpoint (with scheduling and privacy); Facebook, Instagram and
+// TikTok go through /share. TikTok always lands as a draft in her app.
+
+let shareStatus = null;   // last /api/share/status response
+
+async function loadShareStatus() {
+  try { shareStatus = await api("/api/share/status"); } catch (_) { shareStatus = null; }
+  return shareStatus;
+}
+
+function sharePlatforms() {
+  const st = (shareStatus && shareStatus.platforms) || {};
+  const yt = ytu || {};
+  return [
+    { id: "youtube", name: "YouTube",
+      connected: !!yt.connected,
+      state: yt.connected ? `Conectado: ${yt.channel_title || "tu canal"}` : "Sin conectar — conéctalo en Settings" },
+    { id: "facebook", name: "Facebook",
+      connected: !!(st.facebook && st.facebook.connected),
+      state: st.facebook && st.facebook.connected
+        ? `Conectado: ${(st.facebook.account || {}).name || "tu página"}`
+        : (st.facebook && st.facebook.needs) || "Sin conectar" },
+    { id: "instagram", name: "Instagram",
+      connected: !!(st.instagram && st.instagram.connected),
+      state: st.instagram && st.instagram.connected
+        ? `Conectado: @${(st.instagram.account || {}).name || "tu cuenta"}`
+        : (st.instagram && st.instagram.needs) || "Sin conectar" },
+    { id: "tiktok", name: "TikTok",
+      connected: !!(st.tiktok && st.tiktok.connected),
+      state: st.tiktok && st.tiktok.connected
+        ? `Conectado: @${(st.tiktok.account || {}).name || "tu cuenta"} — se guarda como borrador`
+        : "Sin conectar — se guarda como borrador, no se publica directo" },
+  ];
+}
+
+function renderSharePlatforms() {
+  const list = sharePlatforms();
+  $("sharePlatforms").innerHTML = list.map((p) => `
+    <label class="share-platform">
+      <input type="checkbox" data-share="${p.id}" ${p.connected ? "checked" : ""} ${p.connected ? "" : "disabled"}>
+      <span class="sh-name">${esc(p.name)}</span>
+      <span class="sh-state ${p.connected ? "ok" : ""}">${esc(p.state)}</span>
+    </label>`).join("");
+  const any = list.some((p) => p.connected);
+  $("shareNote").textContent = any
+    ? "TikTok se guarda como borrador en tu app — lo publicas tú desde ahí. YouTube, Facebook e Instagram se publican al momento."
+    : "Conecta al menos una cuenta en Settings → Conectar cuentas para compartir.";
+  $("shareGo").disabled = !any;
+}
+
+async function toggleShare() {
+  const p = $("player");
+  if (p.classList.contains("share-on")) { p.classList.remove("share-on"); return; }
+  const c = clips[cur];
+  if (!c) return;
+  p.classList.remove("trim-on", "seo-on", "cap-on", "edit-on");
+  closeFrame();
+  const seo = c.seo || {};
+  $("shTitle").value = seo.title || c.title || "";
+  $("shDesc").value = seo.description || "";
+  $("shTags").value = (seo.tags || []).map((t) => `#${String(t).replace(/^#/, "")}`).join(" ");
+  $("shareMsg").innerHTML = "";
+  if (!ytu) await loadYtu();
+  await loadShareStatus();
+  renderSharePlatforms();
+  p.classList.add("share-on");
+}
+$("pShareBtn").onclick = toggleShare;
+$("shareClose").onclick = () => $("player").classList.remove("share-on");
+
+$("shareGo").onclick = async () => {
+  const c = clips[cur];
+  if (!c) return;
+  const btn = $("shareGo");
+  const msg = $("shareMsg");
+  const picked = [...document.querySelectorAll("[data-share]:checked")].map((b) => b.dataset.share);
+  if (!picked.length) { msg.innerHTML = `<div class="err">Elige al menos una plataforma conectada.</div>`; return; }
+  const title = $("shTitle").value.trim();
+  const description = $("shDesc").value.trim();
+  const tags = $("shTags").value.split(/[\s,]+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
+  if (!title) { msg.innerHTML = `<div class="err">El título no puede estar vacío.</div>`; return; }
+  btn.disabled = true;
+  msg.innerHTML = "Publicando…";
+  const out = [];
+  // YouTube keeps its own endpoint (privacy, category, scheduling).
+  if (picked.includes("youtube")) {
+    try {
+      const st = await api(
+        `/api/jobs/${encodeURIComponent(jobOf(c))}/clips/${encodeURIComponent(c.file)}/youtube`,
+        json("POST", { title, description, tags, privacy: "public", category: "22" }));
+      out.push(`<b>YouTube:</b> ${st && st.kept_private ? "subido, pero YouTube lo dejó en privado." : "publicado."}`);
+      if (st && st.video_id) out.push(` <button class="qbtn" data-open-yt="${esc(st.video_id)}">Ver en YouTube</button>`);
+    } catch (e) {
+      out.push(`<b>YouTube:</b> ${esc(e.message || e)}`);
+    }
+  }
+  const rest = picked.filter((p) => p !== "youtube");
+  if (rest.length) {
+    try {
+      const d = await api(
+        `/api/jobs/${encodeURIComponent(jobOf(c))}/clips/${encodeURIComponent(c.file)}/share`,
+        json("POST", { platforms: rest, title, description, tags }));
+      for (const [p, r] of Object.entries(d.results || {})) {
+        const name = p.charAt(0).toUpperCase() + p.slice(1);
+        if (r.error) out.push(`<b>${name}:</b> ${esc(r.error)}`);
+        else if (r.draft) out.push(`<b>${name}:</b> guardado como borrador — ábrelo en TikTok y publícalo desde ahí.`);
+        else out.push(`<b>${name}:</b> publicado.`);
+      }
+    } catch (e) {
+      out.push(esc(e.message || e));
+    }
+  }
+  msg.innerHTML = `<div class="ok-box">${out.join("<br>")}</div>`;
+  msg.querySelectorAll("[data-open-yt]").forEach((b) => {
+    b.onclick = () => api("/api/youtube/open",
+      json("POST", { video_id: b.dataset.openYt, where: "watch" })).catch((e) => toast(e.message, true));
+  });
+  btn.disabled = false;
+  loadMonthStats();
+};
 
 $("seoCopyAll").onclick = () => {
   const c = clips[cur];
@@ -4324,6 +4861,22 @@ async function toggleEdit() {
   edFillSelect("edLayout", (o.layouts || []).map((x) => ({ value: x.value, label: ED_LAYOUT_ES[x.value] || x.label })), val("layout", "stacked"));
   edFillSelect("edAspect", (o.aspect_ratios || []).map((x) => ({ value: x.value, label: x.value })), val("aspect_ratio", "9:16"));
   $("edOutro").checked = val("outro", true) !== false;
+  $("edTitleIntroClip").checked = val("title_intro", true) !== false;
+  $("edTitleIntroClipSecs").value = Math.max(1, Math.min(10,
+    +val("title_intro_seconds", 3) || 3));
+  // The cover: the second and text it was made with, or the clip's title
+  // as the text to start from. An existing cover shows in the preview.
+  $("edCoverSecond").value = (c.cover_second != null ? c.cover_second : 0.5);
+  $("edCoverText").value = c.cover_text || c.title || "";
+  const coverImg = $("edCoverImg");
+  if (c.cover_url) {
+    coverImg.src = c.cover_url + "?v=" + Date.now();
+    coverImg.classList.remove("hidden");
+    $("edCoverHint").textContent = "Esta es la portada actual del clip.";
+  } else {
+    coverImg.classList.add("hidden");
+    $("edCoverHint").textContent = "Elige el segundo y el texto, y pulsa Generar portada para verla.";
+  }
   $("edKeepCopy").checked = false;
   $("edMsg").textContent = "";
   const hi = $("edHiColor").value, tx = $("edTextColor").value;
@@ -4351,6 +4904,9 @@ async function applyClipEdit() {
     layout: $("edLayout").value,
     aspect_ratio: $("edAspect").value,
     outro: $("edOutro").checked,
+    title_intro: $("edTitleIntroClip").checked,
+    title_intro_seconds: Math.max(1, Math.min(10,
+      +$("edTitleIntroClipSecs").value || 3)),
     keep_copy: $("edKeepCopy").checked,
   };
   btn.disabled = true;
@@ -4383,6 +4939,48 @@ async function applyClipEdit() {
 }
 $("pEditBtn").onclick = toggleEdit;
 $("edClose").onclick = () => $("player").classList.remove("edit-on");
+
+// The editor's two tabs: Portada (the cover still + its text) and
+// Subtítulos (the burned-in caption controls). Cámara and Formato sit
+// below, common to both.
+function edTab(which) {
+  const cover = which === "cover";
+  $("edTabCover").classList.toggle("on", cover);
+  $("edTabSubs").classList.toggle("on", !cover);
+  $("edTabCoverPane").classList.toggle("hidden", !cover);
+  $("edTabSubsPane").classList.toggle("hidden", cover);
+}
+$("edTabCover").onclick = () => edTab("cover");
+$("edTabSubs").onclick = () => edTab("subs");
+
+// Make the cover for the clip in the player: a still from the chosen
+// second, with the text drawn on it in the subtitle style.
+$("edCoverGo").onclick = async () => {
+  const c = clips[cur];
+  if (!c) return;
+  const btn = $("edCoverGo");
+  const hint = $("edCoverHint");
+  btn.disabled = true;
+  hint.textContent = "Generando la portada…";
+  try {
+    const updated = await json(
+      `/api/jobs/${encodeURIComponent(jobOf(c))}/clips/${encodeURIComponent(c.file)}/cover`,
+      { method: "POST", body: JSON.stringify({
+        second: Math.max(0, +$("edCoverSecond").value || 0.5),
+        text: $("edCoverText").value.trim(),
+      }) });
+    patchClip(c, updated);
+    const img = $("edCoverImg");
+    img.src = updated.cover_url + "?v=" + Date.now();
+    img.classList.remove("hidden");
+    hint.textContent = "Portada lista. Se guarda con el clip para usarla al subirlo.";
+    renderClips();
+  } catch (e) {
+    hint.textContent = String(e.message || e);
+  } finally {
+    btn.disabled = false;
+  }
+};
 $("edApply").onclick = applyClipEdit;
 $("edGoTrim").onclick = () => { $("player").classList.remove("edit-on"); toggleTrim(); };
 edWireColourPick("edHiColor", "edHiPick");
@@ -4987,6 +5585,54 @@ $("pSave").onclick = async () => {
   } finally {
     $("pSave").disabled = false;
   }
+};
+
+// The Download button: an <a download> works in a real browser, but the
+// app's own window is pywebview (Edge WebView2), which hands downloads to
+// the host and pywebview does not handle them — the click did nothing in
+// v1.0.3. So in the native window the button asks the host bridge for a
+// Save dialog; if that is unavailable it falls back to the server copying
+// the clip into Downloads. Only a real browser keeps the anchor's default.
+// Shared with the Exportar button on every clip card.
+async function downloadClip(c) {
+  if (!c) return;
+  const bridge = window.pywebview && window.pywebview.js && window.pywebview.js.api
+    && window.pywebview.js.api.save_clip;
+  if (!bridge) {
+    // Real browser, no bridge: follow the anchor's own download.
+    const a = document.createElement("a");
+    a.href = c.url;
+    a.download = c.file || "short.mp4";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
+  try {
+    const r = await bridge(jobOf(c), c.file);
+    if (r && r.path) { toast(`Descargado en ${r.path}`); return; }
+    if (r && r.cancelled) { toast("Descarga cancelada."); return; }
+    throw new Error((r && r.error) || "Save dialog unavailable");
+  } catch (err) {
+    try {
+      const d = await api(
+        `/api/jobs/${encodeURIComponent(jobOf(c))}/clips/${encodeURIComponent(c.file)}/download`,
+        json("POST", {}));
+      toast(`Descargado en ${d.path}`);
+    } catch (err2) {
+      toast(err2.message, true);
+    }
+  }
+}
+
+$("pDownload").onclick = async (e) => {
+  const c = clips[cur];
+  if (!c) return;
+  const bridge = window.pywebview && window.pywebview.js && window.pywebview.js.api
+    && window.pywebview.js.api.save_clip;
+  if (!bridge) return; // real browser: the anchor downloads on its own
+  e.preventDefault();
+  await downloadClip(c);
 };
 
 $("pDelete").onclick = () => {

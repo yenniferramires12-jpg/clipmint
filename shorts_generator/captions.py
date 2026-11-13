@@ -357,7 +357,8 @@ def build_ass(words: List[Dict], style: str, width: int, height: int,
               y_frac: float, hook: str = "",
               hook_windows: Sequence[Tuple[float, float]] = (),
               font: str = "", colour: str = "", text_colour: str = "",
-              hook_chars: int = HOOK_CHARS) -> str:
+              hook_chars: int = HOOK_CHARS,
+              hook_size_frac: float = 0.06) -> str:
     """An ASS script that captions `words` in `style`. "" when there is nothing
     to say.
 
@@ -368,6 +369,11 @@ def build_ass(words: List[Dict], style: str, width: int, height: int,
 
     `font`, `colour` and `text_colour` swap the style's face, the spoken
     word's colour and the rest of the line's -- see look().
+
+    `hook_size_frac` is the hook line's size as a fraction of the frame's
+    shorter side. The default 0.06 is the hook's own smaller size; a title
+    shown at the start of a clip passes the caption style's size so the
+    title looks exactly like the burned-in subtitles.
     """
     preset = look(style, font, colour, text_colour)
     if not preset:
@@ -436,7 +442,7 @@ def build_ass(words: List[Dict], style: str, width: int, height: int,
 
     # The hook line: the preset's face, sentence case, on a dark box across
     # the top. Its own layer, so it never trades places with a caption.
-    hook_size = max(12, int(round(base * 0.06)))
+    hook_size = max(12, int(round(base * hook_size_frac)))
     for a, b in windows:
         events.append(
             f"Dialogue: 1,{_ass_time(a)},{_ass_time(b)},Hook,,0,0,0,,"

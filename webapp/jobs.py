@@ -294,9 +294,21 @@ class Job:
     finished_at: Optional[float] = None
     # "full" runs every stage; "clips" re-renders only the clips that failed.
     mode: str = "full"
+    # The live this run's clips were cut from, if any — a part of a live
+    # recording becomes its own job, and this is what groups the parts of
+    # one live together (see webapp/live.py).
+    live_id: Optional[str] = None
     # Someone pressed Stop. The worker unwinds at its next step and the run is
     # left "interrupted": it can be resumed later or deleted.
     stop_requested: bool = False
+    # How many clips were asked for, how many actually came out, and why the
+    # two differ. A run would rather hand back fewer clips than a weak one
+    # (see highlights.strong), but it used to do that in silence — the user
+    # asked for 3 and got 1 with no explanation. `shortfall` carries the
+    # numbers so the page can say so plainly and offer more moments.
+    requested_clips: int = 0
+    delivered_clips: int = 0
+    shortfall: Optional[Dict] = None
     _version: int = 0
 
     @property
@@ -326,6 +338,7 @@ class Job:
             "source_path": self.source_path,
             "source_title": self.source_title,
             "shorts_dir": self.out_dir,
+            "live_id": self.live_id,
             "created_at": self.created_at,
             "restored": self.restored,
             # What the page needs to offer a retry: how many clips did not
@@ -337,6 +350,10 @@ class Job:
             # making. The page offers to carry it on.
             "resumable": self.status == "interrupted" and bool(self.source),
             "started_at": self.started_at,
+            # How many clips were asked for vs how many came out, and why.
+            "requested_clips": self.requested_clips,
+            "delivered_clips": self.delivered_clips,
+            "shortfall": self.shortfall,
             "elapsed": (round((self.finished_at or time.time()) - self.started_at, 1)
                         if self.started_at else None),
             "eta_seconds": self.eta_seconds(),
@@ -382,10 +399,18 @@ class Job:
             "source_path": self.source_path,
             "download_format": self.download_format,
             "language": self.language,
+            "live_id": self.live_id,
             "video_meta": self.video_meta,
             "subject": self.subject,
             "spec": self.spec.to_dict(),
             "clips": self.clips,
+            # Every moment the ranker found, weak ones included: "buscar más
+            # momentos" re-picks from these at a lower bar instead of paying
+            # for another ranking pass, so they have to survive a restart.
+            "highlights": self.highlights,
+            "requested_clips": self.requested_clips,
+            "delivered_clips": self.delivered_clips,
+            "shortfall": self.shortfall,
         }
 
 
@@ -403,9 +428,11 @@ class JobStore:
     # --- public API -------------------------------------------------------
 
     def create(self, source: str, spec: LayoutSpec, download_format: str = "best",
-               language: Optional[str] = None) -> Job:
+               language: Optional[str] = None,
+               live_id: Optional[str] = None) -> Job:
         job = Job(id=uuid.uuid4().hex[:12], source=source, spec=spec,
-                  download_format=download_format, language=language)
+                  download_format=download_format, language=language,
+                  requested_clips=int(spec.num_clips), live_id=live_id)
         with self._lock:
             self._jobs[job.id] = job
         os.makedirs(job.out_dir, exist_ok=True)
@@ -824,6 +851,11 @@ class JobStore:
             ),
             source_path=source_path if source_path and os.path.exists(source_path) else None,
             clips=clips,
+            highlights=manifest.get("highlights") or [],
+            live_id=manifest.get("live_id"),
+            requested_clips=int(manifest.get("requested_clips") or 0),
+            delivered_clips=int(manifest.get("delivered_clips") or len(clips)),
+            shortfall=manifest.get("shortfall"),
             video_meta=manifest.get("video_meta") or {},
             subject=manifest.get("subject") or {},
             created_at=created,
@@ -1090,6 +1122,12 @@ class JobStore:
             job.progress = 1.0
             job.message = f"{ok} clip(s) ready" + (f" — {left} still failed" if left else "")
             job.error = None if ok else "no clips rendered"
+            # A retry that fixed clips changes the count the page shows.
+            job.delivered_clips = ok
+            if ok >= int(job.spec.num_clips):
+                job.shortfall = None
+            elif job.shortfall:
+                job.shortfall = {**job.shortfall, "delivered": ok}
             job._version += 1
         if ok:
             self._persist(job)
@@ -1337,9 +1375,15 @@ class JobStore:
             print(f"[jobs] could not name the folder after the video ({e}) — "
                   f"using the run id", flush=True)
 
-    def _finalize(self, job: Job, shorts: List[Dict], all_highlights: List[Dict]) -> None:
+    def _records_for(self, job: Job, shorts: List[Dict],
+                     start_index: int = 1) -> List[Dict]:
+        """Clip records for rendered shorts, best first.
+
+        Shared by _finalize and more_moments: a re-rendered clip and a
+        freshly ranked one are the same shape by the time they are listed.
+        """
         rendered = []
-        for i, s in enumerate(shorts, 1):
+        for n, s in enumerate(shorts, start_index):
             path = s.get("clip_url")
             # Name the file after the title it will be uploaded under. SEO runs
             # before rendering, so the title is already there by the time the
@@ -1350,9 +1394,9 @@ class JobStore:
                 name = rename_to_title(Path(job.out_dir), name,
                                        seo.get("title") or s.get("title") or "")
             rendered.append({
-                "index": i,
+                "index": n,
                 # `shorts` arrives best-first, so position is the ranking.
-                "rank": i,
+                "rank": n,
                 "title": s.get("title"),
                 "score": s.get("score"),
                 "start_time": s.get("start_time"),
@@ -1402,11 +1446,33 @@ class JobStore:
                 "url": f"/api/jobs/{job.id}/clips/{name}" if name else None,
             })
         scorecard.attach(rendered)
+        return rendered
+
+    def _finalize(self, job: Job, shorts: List[Dict], all_highlights: List[Dict]) -> None:
+        rendered = self._records_for(job, shorts)
 
         ok = [c for c in rendered if c["url"]]
+        # How many moments were strong enough to cut, out of everything the
+        # ranker found. When fewer clips came out than were asked for, this
+        # is the reason — and the page shows it instead of leaving the user
+        # to wonder where the rest went.
+        from shorts_generator.highlights import MIN_SCORE
+        strong_count = sum(1 for h in all_highlights
+                           if int(h.get("score", 0) or 0) >= MIN_SCORE)
+        shortfall = None
+        if len(ok) < int(job.spec.num_clips):
+            shortfall = {
+                "requested": int(job.spec.num_clips),
+                "delivered": len(ok),
+                "strong": strong_count,
+                "candidates": len(all_highlights),
+            }
         with self._lock:
             job.clips = rendered
             job.highlights = all_highlights
+            job.requested_clips = int(job.spec.num_clips)
+            job.delivered_clips = len(ok)
+            job.shortfall = shortfall
             job.status = "done" if ok else "error"
             job.stage = "done"
             job.progress = 1.0
@@ -1419,6 +1485,71 @@ class JobStore:
         # Record the run next to its clips, so it is still here next launch.
         if ok:
             self._persist(job)
+
+    def more_moments(self, job: Job, min_score: int = 45) -> List[Dict]:
+        """Cut the clips a short run did not get, from weaker moments.
+
+        A run hands back fewer clips than asked for when too few moments
+        scored MIN_SCORE or more — and it used to leave it at that. This
+        re-picks from the moments the ranker already found, at a lower bar
+        the user chose, and renders the extra clips. No new ranking pass is
+        paid for: job.highlights keeps every candidate, weak ones included.
+        """
+        from shorts_generator.highlights import strong
+
+        if job.status != "done":
+            raise ValueError("This run has not finished yet.")
+        if not job.highlights:
+            raise ValueError("This run has no ranked moments to draw from — run it again.")
+        if not job.source_path or not os.path.exists(job.source_path):
+            raise ValueError("The source video for this job is gone — re-run it to cut more.")
+        delivered = sum(1 for c in job.clips if c.get("url"))
+        needed = int(job.spec.num_clips) - delivered
+        if needed <= 0:
+            raise ValueError("This run already delivered every clip asked for.")
+
+        def overlaps(a_start, a_end, b_start, b_end):
+            shared = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+            return shared > 0.5 * (a_end - a_start)
+
+        taken = [(float(c.get("start_time", 0) or 0), float(c.get("end_time", 0) or 0))
+                 for c in job.clips if c.get("start_time") is not None]
+        chosen = []
+        for h in strong(job.highlights, min_score):
+            if len(chosen) >= needed:
+                break
+            s, e = float(h.get("start_time", 0) or 0), float(h.get("end_time", 0) or 0)
+            if any(overlaps(s, e, ts, te) for ts, te in taken):
+                continue
+            chosen.append(h)
+        if not chosen:
+            raise ValueError(
+                f"No more moments to cut, even at a score of {min_score} — "
+                "the rest of the video scored lower than that.")
+        # The render does not attach SEO; give each extra clip the title and
+        # hook the ranker already wrote for it, so it lists and uploads like
+        # the rest. Boost can rewrite it with the model afterwards.
+        for h in chosen:
+            title = (h.get("title") or "Clip")[:100]
+            h.setdefault("seo", {
+                "title": title,
+                "description": h.get("hook_sentence") or title,
+                "tags": [],
+            })
+        shorts = self._render(job, job.source_path, chosen)
+        new = self._records_for(job, shorts, start_index=len(job.clips) + 1)
+        added = [c for c in new if c.get("url")]
+        with self._lock:
+            job.clips.extend(new)
+            job.delivered_clips = sum(1 for c in job.clips if c.get("url"))
+            if job.delivered_clips >= int(job.spec.num_clips):
+                job.shortfall = None
+            elif job.shortfall:
+                job.shortfall = {**job.shortfall, "delivered": job.delivered_clips}
+            job._version += 1
+        if added:
+            self._persist(job)
+        return added
 
 
 def job_kind(job: Job) -> str:
