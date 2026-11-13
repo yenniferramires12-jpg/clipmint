@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ClipMint</title>
+<title>ClipZoneRD</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='70' y='15' rx='20' fill='%23ff0033'/><path d='M40 35 L68 50 L40 65 Z' fill='%23fff'/></svg>">
 <script>
@@ -92,8 +92,8 @@ addEventListener("load", function () {
   <div class="mh-left">
     <button class="ibtn" id="menuBtn" title="Menu"><svg><use href="#i-menu"/></svg></button>
     <a class="logo" href="#top">
-      <span class="logo-mark"><svg><use href="#i-yt"/></svg></span>
-      <span class="logo-word">Clip<b>Mint</b></span>
+      <span class="logo-mark"><img class="logo-img" src="clipzonerd-logo.png" alt="ClipZoneRD"></span>
+      <span class="logo-word">Clip<b>ZoneRD</b></span>
       <span class="logo-tag">local</span>
       <span class="logo-ver" id="topVer"></span>
     </a>
@@ -107,6 +107,7 @@ addEventListener("load", function () {
         <button class="search-clear hidden" id="urlClear" title="Clear"><svg><use href="#i-close"/></svg></button>
       </div>
       <button class="search-go" id="load" title="Load this link"><svg><use href="#i-search"/></svg></button>
+      <button class="search-go paste-go" id="pasteGo" title="Paste and go — load the link and start cutting in one step">Pegar y listo</button>
     </div>
     <button class="ibtn round" id="pickFile" title="Choose a video file"><svg><use href="#i-upload"/></svg></button>
   </div>
@@ -120,7 +121,7 @@ addEventListener("load", function () {
     <button class="ibtn" id="settingsBtn" title="Settings"><svg><use href="#i-gear"/></svg></button>
     <div class="brand">
       <div class="brand-who">
-        <span class="brand-by">Built by</span>
+        <span class="brand-by">Based on ClipMint by</span>
         <span class="brand-name">Parth Bhadana</span>
       </div>
       <div class="brand-links">
@@ -151,7 +152,7 @@ addEventListener("load", function () {
     <a class="g-item" id="gFeedback"><svg><use href="#i-chat"/></svg><span>Send feedback</span></a>
     <p class="g-foot">Everything runs on this PC.<br>Nothing is uploaded unless you press Upload.</p>
     <p class="g-ver" id="gVer"></p>
-    <button class="g-credit" id="gAbout">Built by <b>Parth Bhadana</b><i>Links and credits</i></button>
+    <button class="g-credit" id="gAbout">Based on ClipMint by <b>Parth Bhadana</b><i>Links and credits</i></button>
   </nav>
 
   <main class="content">
@@ -217,6 +218,15 @@ addEventListener("load", function () {
             <div class="vids" id="vids"></div>
           </div>
 
+          <div id="watchedWrap">
+            <div class="p-head tight"><h2>Watched channels</h2><span class="p-hint">Channels you follow — one tap to see their latest videos</span></div>
+            <div class="watch-add">
+              <input type="text" id="watchUrl" placeholder="Paste a channel link to watch it" autocomplete="off" spellcheck="false">
+              <button class="btn ghost sm" id="watchAdd">Watch</button>
+            </div>
+            <div class="watch-list" id="watchList"></div>
+          </div>
+
           <div id="srcErr"></div>
         </section>
 
@@ -254,6 +264,30 @@ addEventListener("load", function () {
               <button class="chip" data-kind="other">Something else</button>
             </div>
           </div>
+          <div class="ar-row">
+            <span class="ar-label">Clip length. How long each clip runs</span>
+            <div class="chipbar wrap" id="durBar">
+              <button class="chip on" data-dur="">Auto</button>
+              <button class="chip" data-dur="30">30s</button>
+              <button class="chip" data-dur="45">45s</button>
+              <button class="chip" data-dur="60">1:00</button>
+              <button class="chip" data-dur="90">1:30</button>
+              <button class="chip" data-dur="120">2:00</button>
+              <label class="dur-exact">Exact seconds <input type="number" id="durExact" min="10" max="300" step="1" placeholder="s"></label>
+            </div>
+          </div>
+          <div class="ar-row">
+            <span class="ar-label">Framing. How the clip is laid out</span>
+            <div class="chipbar wrap" id="layoutBar">
+              <button class="chip on" data-layout="">Auto</button>
+              <button class="chip" data-layout="stacked">Dividida — gamer on top, game below</button>
+              <button class="chip" data-layout="facetrack">Face tracking</button>
+              <button class="chip" data-layout="center">Centered</button>
+            </div>
+          </div>
+          <div class="ar-row">
+            <label class="check"><input type="checkbox" id="monetize"><span>Monetization mode — only moments longer than 1 minute, so the clip can earn on TikTok and YouTube</span></label>
+          </div>
         </section>
 
         <!-- 3 · go -->
@@ -270,10 +304,10 @@ addEventListener("load", function () {
           <label class="fld">
             <span>Spoken language. Pin it &mdash; auto-detect drifts on game audio</span>
             <select id="spokenLang">
-              <option value="en" selected>English</option>
+              <option value="en">English</option>
               <option value="auto">Auto-detect &mdash; only for mixed sources</option>
               <option value="hi">Hindi</option>
-              <option value="es">Spanish</option>
+              <option value="es" selected>Spanish</option>
               <option value="pt">Portuguese</option>
               <option value="fr">French</option>
               <option value="de">German</option>
@@ -305,13 +339,14 @@ addEventListener("load", function () {
               <span class="p-hint">Applied to every clip after it is cut</span>
             </div>
             <div class="ar-row">
-              <span class="ar-label">Captions. Burned in, the spoken word lit up <em class="said hidden" data-said="captions">set by your words</em></span>
+              <span class="ar-label">Captions. Burned in, the spoken word lit up — off by default: every clip also ships with a separate subtitle file <em class="said hidden" data-said="captions">set by your words</em></span>
               <div class="chipbar capbar" id="capBar">
-                <button class="chip" data-cap="off">Off</button>
-                <button class="chip cap cap-bold on" data-cap="bold"><span>BOLD</span></button>
+                <button class="chip on" data-cap="off">Off</button>
+                <button class="chip cap cap-bold" data-cap="bold"><span>BOLD</span></button>
                 <button class="chip cap cap-punch" data-cap="punch"><span>PUNCH</span></button>
                 <button class="chip cap cap-clean" data-cap="clean"><span>Clean</span></button>
                 <button class="chip cap cap-comic" data-cap="comic"><span>COMIC</span></button>
+                <button class="chip cap cap-clipzonerd" data-cap="clipzonerd"><span>ClipZoneRD</span></button>
               </div>
             </div>
             <!-- Put over the style: its face, colours and place. The fonts and
@@ -636,7 +671,7 @@ addEventListener("load", function () {
     <div class="safe-row">
       <button class="qbtn" data-open="youtube-terms">YouTube Terms of Service</button>
       <button class="qbtn" data-open="google-privacy">Google Privacy Policy</button>
-      <button class="qbtn" data-open="privacy">ClipMint's privacy policy</button>
+      <button class="qbtn" data-open="privacy">ClipZoneRD's privacy policy</button>
       <button class="qbtn" data-open="google-permissions">Withdraw access at Google</button>
     </div>
     <div id="ytuMsg"></div>
@@ -971,7 +1006,7 @@ addEventListener("load", function () {
     </div>
 
     <div class="w-by">
-      <span class="w-by-label">Built by</span>
+      <span class="w-by-label">Based on ClipMint by</span>
       <span class="w-by-name">Parth Bhadana</span>
       <span class="w-ver" id="wVer"></span>
     </div>

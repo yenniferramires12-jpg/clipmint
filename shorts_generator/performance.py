@@ -87,7 +87,7 @@ def _title_written(clip: Dict) -> Optional[bool]:
 # person, how to read it off the clip, and, for measured signals, the weight
 # in signals.BASE_WEIGHTS it would tune.
 FEATURES: List[Tuple[str, str, Callable[[Dict], object], Optional[str]]] = [
-    ("score", "ClipMint's overall score", lambda c: _num(c.get("score")), None),
+    ("score", "ClipZoneRD's overall score", lambda c: _num(c.get("score")), None),
     ("hook", "the hook score (how hard the first line stops a scroll)",
      lambda c: _num(c.get("hook_score")), None),
     ("moment", "the moment score", lambda c: _num(c.get("viral_score") or c.get("model_score")), None),
@@ -193,6 +193,18 @@ def analyse(clips: Sequence[Dict], now: Optional[datetime] = None) -> Dict:
     """Everything the channel's numbers say, ready to show and to rank with."""
     rows = judged(clips, now)
     all_views = [views(c) for c in rows]
+    # Views learning: totals over every clip that has a count, the most-viewed
+    # clip, and the split by platform — the numbers the library shows, and
+    # what the creator enters by hand for clips published elsewhere.
+    with_views = [c for c in clips if views(c) is not None]
+    total_views = sum(views(c) for c in with_views)
+    most = max(with_views, key=lambda c: views(c) or 0) if with_views else None
+    by_platform: Dict[str, Dict] = {}
+    for c in with_views:
+        plat = str((c.get("performance") or {}).get("platform") or "youtube").lower()
+        slot = by_platform.setdefault(plat, {"clips": 0, "views": 0})
+        slot["clips"] += 1
+        slot["views"] += views(c) or 0
     out: Dict = {
         "clips": len(rows),
         "waiting": sum(1 for c in clips if views(c) is not None) - len(rows),
@@ -200,6 +212,17 @@ def analyse(clips: Sequence[Dict], now: Optional[datetime] = None) -> Dict:
         "findings": [],
         "ranking": None,
         "tuning": {},
+        "total_views": total_views,
+        "with_views": len(with_views),
+        "most_viewed": ({
+            "title": (most.get("seo") or {}).get("title") or most.get("title")
+                     or most.get("file"),
+            "views": views(most),
+            "file": most.get("file"),
+            "platform": str((most.get("performance") or {}).get("platform")
+                            or "youtube").lower(),
+        } if most is not None else None),
+        "by_platform": by_platform,
     }
     if len(rows) < MIN_CLIPS:
         return out

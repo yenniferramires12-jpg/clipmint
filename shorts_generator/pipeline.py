@@ -49,7 +49,8 @@ def _run_local(
     if not all_highlights:
         raise RuntimeError("Highlight generator returned zero clips.")
 
-    top = sorted(all_highlights, key=lambda h: int(h.get("score", 0)), reverse=True)[:num_clips]
+    from .highlights import strong
+    top = strong(all_highlights)[:num_clips]
     print(f"[pipeline/local] cropping {len(top)} of {len(all_highlights)} candidates", flush=True)
 
     shorts = crop_highlights_local(source_path, top, aspect_ratio=aspect_ratio)
@@ -85,7 +86,8 @@ def _run_api(
     if not all_highlights:
         raise RuntimeError("Highlight generator returned zero clips.")
 
-    top = sorted(all_highlights, key=lambda h: int(h.get("score", 0)), reverse=True)[:num_clips]
+    from .highlights import strong
+    top = strong(all_highlights)[:num_clips]
     print(f"[pipeline] cropping {len(top)} of {len(all_highlights)} candidates", flush=True)
 
     shorts = crop_highlights(source_url, top, aspect_ratio=aspect_ratio)

@@ -1021,6 +1021,9 @@ def _fallback_for(h: Dict, video_meta: Optional[Dict],
         "tag_options": options,
         "hashtags": hashtags,
         "hook_text": (h.get("hook_sentence") or h.get("title") or "")[:HOOK_LIMIT],
+        "hook_options": _hook_options(
+            h.get("hook_sentence") or h.get("title") or "",
+            [title], h.get("first_line", ""), h.get("hook_sentence", "")),
         "search_phrase": "",
         "why_it_works": h.get("virality_reason", ""),
         "about": _about(who),
@@ -1028,6 +1031,22 @@ def _fallback_for(h: Dict, video_meta: Optional[Dict],
     }
     entry.update(_social_fallback(entry, h, who, subject))
     return entry
+
+
+def _hook_options(hook: str, titles: List[str], first_line: str,
+                  hook_sentence: str) -> List[str]:
+    """Five hooks for the first 3 seconds, distinct lines, best first.
+
+    The hook line, the best titles reworded as hooks, and the clip's own
+    opening line. Shared by the model path and the fallback, so a clip gets
+    its hooks even when the model was not reachable.
+    """
+    out: List[str] = []
+    for candidate in ([hook, *titles, first_line, hook_sentence]):
+        line = re.sub(r"\s+", " ", str(candidate or "")).strip()[:HOOK_LIMIT]
+        if line and line.lower() not in {o.lower() for o in out}:
+            out.append(line)
+    return out[:5]
 
 
 def _social_hashtags(raw: object, controlled: List[str]) -> List[str]:
@@ -1132,6 +1151,12 @@ def _coerce_entry(item: Dict, h: Dict, video_meta: Optional[Dict],
     tag_opts = _tag_options(model_tags, who, subject, _format_terms(who))
     hook = re.sub(r"\s+", " ", str(item.get("hook_text") or "")).strip()[:HOOK_LIMIT]
 
+    # Five hooks for the first 3 seconds: the hook line, the best titles
+    # reworded as hooks, and the clip's own opening line — distinct lines,
+    # so the creator picks the one that lands hardest.
+    hook_options = _hook_options(
+        hook, [o.get("title", "") for o in options[:3]],
+        h.get("first_line", ""), h.get("hook_sentence", ""))
     entry = {
         "title": title,
         "title_options": options,
@@ -1141,6 +1166,7 @@ def _coerce_entry(item: Dict, h: Dict, video_meta: Optional[Dict],
         "tag_options": tag_opts or base["tag_options"],
         "hashtags": hashtags,
         "hook_text": hook or base["hook_text"],
+        "hook_options": hook_options[:5],
         "search_phrase": phrase,
         "why_it_works": str(item.get("why_it_works") or h.get("virality_reason") or "").strip(),
         "about": _about(who),

@@ -32,13 +32,34 @@ def _folder() -> Path:
     return profiles.folder() / "brand"
 
 
+# The logo ClipZoneRD ships with (the controller with the golden crown),
+# used when the user has not uploaded a logo of their own.
+BUNDLED_LOGO_NAME = "clipzonerd-logo.png"
+
+
+def bundled_logo_path() -> Optional[Path]:
+    """The logo bundled with the app, from the build or the repo.
+
+    `bundled.asset_dir` only resolves directories, and the logo is a file,
+    so the two places it can live are checked directly.
+    """
+    import sys
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        p = Path(bundle) / "assets" / BUNDLED_LOGO_NAME
+        if p.is_file():
+            return p
+    p = Path(__file__).resolve().parent.parent / "assets" / BUNDLED_LOGO_NAME
+    return p if p.is_file() else None
+
+
 def logo_path() -> Optional[Path]:
-    """The stored logo, if there is one."""
+    """The stored logo, if there is one — else the bundled ClipZoneRD logo."""
     for ext in (".png", ".jpg"):
         p = _folder() / f"logo{ext}"
         if p.exists() and p.stat().st_size > 0:
             return p
-    return None
+    return bundled_logo_path()
 
 
 def corner() -> str:

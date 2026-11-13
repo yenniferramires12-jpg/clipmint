@@ -9,7 +9,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="ClipMint web UI")
+    p = argparse.ArgumentParser(description="ClipZoneRD web UI")
     p.add_argument("--host", default="127.0.0.1",
                    help="Bind address. 127.0.0.1 (default) is local-only.")
     p.add_argument("--port", type=int, default=8000)
@@ -23,7 +23,7 @@ def main() -> None:
             flush=True,
         )
 
-    print(f"\n  ClipMint  ->  http://{args.host}:{args.port}\n", flush=True)
+    print(f"\n  ClipZoneRD  ->  http://{args.host}:{args.port}\n", flush=True)
     uvicorn.run("webapp.server:app", host=args.host, port=args.port, reload=args.reload)
 
 

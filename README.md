@@ -1,8 +1,10 @@
 <div align="center">
 
-# ✂️ ClipMint
+# ✂️ ClipZoneRD
 
 ### Turn any long video into Shorts, Reels and TikToks — on your own PC
+
+**ClipZoneRD** is the Spanish-first, Dominican-branded edition of [ClipMint](https://github.com/kleZ799/clipmint) — the same free, open-source clip engine, with the ClipZoneRD look, Spanish interface, split-screen *Dividida* framing, a monetization mode for clips over 1 minute, and the animated ClipZoneRD outro on every clip.
 
 A free, open-source AI clip generator for podcasts, interviews, vlogs,
 tutorials, gaming videos and stream VODs. It works out what kind of video it is, finds the moments
@@ -19,17 +21,17 @@ A free alternative to Opus Clip, Klap and Vizard —
 **[see how it compares](docs/compare.md)**, including where they do more.
 
 
-[![Download](https://img.shields.io/badge/⬇_Download_for_Windows-224_MB-ff0033?style=for-the-badge)](https://github.com/kleZ799/clipmint/releases/latest/download/ClipMint.exe)
+[![Download](https://img.shields.io/badge/⬇_Download_for_Windows-ClipZoneRD.exe-ff1744?style=for-the-badge)](https://github.com/yenniferramires12-jpg/clipmint/releases/latest/download/ClipZoneRD.exe)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
-[![Download for Mac](https://img.shields.io/badge/⬇_Download_for_Mac-BETA_·_Apple_Silicon-f59e0b?style=for-the-badge)](https://github.com/kleZ799/clipmint/releases/latest/download/ClipMint-macOS-arm64.zip)
+[![Download for Mac](https://img.shields.io/badge/⬇_Download_for_Mac-BETA_·_Apple_Silicon-f59e0b?style=for-the-badge)](https://github.com/yenniferramires12-jpg/clipmint/releases/latest/download/ClipZoneRD-macOS-arm64.zip)
 
 **The Mac build is a beta and has never been run on a Mac** — I don't own one.
 It is built and checked by GitHub's macOS runners, not by me. It may not start
 at all. [Tell me what happens](https://github.com/kleZ799/clipmint/issues/new)
 and I'll fix it. Windows is the tested build.
 
-[![Download for Linux](https://img.shields.io/badge/⬇_Download_for_Linux-x86--64-3b82f6?style=for-the-badge)](https://github.com/kleZ799/clipmint/releases/latest/download/ClipMint-linux-x86_64)
+[![Download for Linux](https://img.shields.io/badge/⬇_Download_for_Linux-x86--64-1e90ff?style=for-the-badge)](https://github.com/yenniferramires12-jpg/clipmint/releases/latest/download/ClipZoneRD-linux-x86_64)
 
 **The Linux build has not been tested on a real Linux desktop.** It is built
 and run under WSL here, and every published build is started by the release
@@ -41,11 +43,11 @@ browser rather than in a window of its own.
 
 <!-- These read GitHub live, so a new release renames them on its own and
      there is no version number in this file to go stale. -->
-[![Latest version](https://img.shields.io/github/v/release/kleZ799/clipmint?style=flat-square&label=latest%20build&color=ff0033)](https://github.com/kleZ799/clipmint/releases/latest)
-[![Released](https://img.shields.io/github/release-date/kleZ799/clipmint?style=flat-square&label=released&color=555)](https://github.com/kleZ799/clipmint/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/kleZ799/clipmint/total?style=flat-square&label=downloads&color=555)](https://github.com/kleZ799/clipmint/releases)
+[![Latest version](https://img.shields.io/github/v/release/yenniferramires12-jpg/clipmint?style=flat-square&label=latest%20build&color=ff0033)](https://github.com/yenniferramires12-jpg/clipmint/releases/latest)
+[![Released](https://img.shields.io/github/release-date/yenniferramires12-jpg/clipmint?style=flat-square&label=released&color=555)](https://github.com/yenniferramires12-jpg/clipmint/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/yenniferramires12-jpg/clipmint/total?style=flat-square&label=downloads&color=555)](https://github.com/yenniferramires12-jpg/clipmint/releases)
 
-**Built by [Parth Bhadana](https://github.com/kleZ799)**
+**ClipZoneRD — based on [ClipMint](https://github.com/kleZ799/clipmint) by [Parth Bhadana](https://github.com/kleZ799)**
 &nbsp;·&nbsp; [Website](https://klez799.github.io/clipmint/)
 &nbsp;·&nbsp; [YouTube](https://www.youtube.com/@ParthBhadana799)
 &nbsp;·&nbsp; [GitHub](https://github.com/kleZ799)
@@ -66,7 +68,7 @@ the architecture, the hard problems, and the numbers.
 
 <!-- GitHub will not play a video committed to the repo inside a README, so the
      poster links to the site, where the same file plays in place. -->
-<a href="https://klez799.github.io/clipmint/#showcase"><img src="assets/showcase/clipmint-showcase-play.jpg" alt="Watch the 58-second tour of ClipMint: a podcast, vlog, tutorial, interview or stream goes in, and ranked Shorts come out, titled and scheduled to YouTube" width="880"></a>
+<a href="https://klez799.github.io/clipmint/#showcase"><img src="assets/showcase/clipmint-showcase-play.jpg" alt="Watch the 58-second tour of ClipZoneRD: a podcast, vlog, tutorial, interview or stream goes in, and ranked Shorts come out, titled and scheduled to YouTube" width="880"></a>
 
 **[▶ Watch the 58-second tour](https://klez799.github.io/clipmint/#showcase)** · [or the mp4](assets/showcase/clipmint-showcase.mp4)
 
@@ -499,15 +501,15 @@ tier's daily limit. A second provider's key in Settings covers that.
 <img src="assets/screenshots/09-youtube-upload.png" alt="Boost scrolled to Post it to your channel: going to Parth Bhadana, who can see it, the category, the made-for-kids question, and the Upload to YouTube button" width="880">
 
 It goes through **YouTube's official API**. You sign in on Google's own page,
-ClipMint never sees your password, and the permission it gets can upload but
+ClipZoneRD never sees your password, and the permission it gets can upload but
 can't delete or change anything. **Disconnect** hands the permission back. No
 bot clicks around YouTube Studio, which would break YouTube's terms and put
 your channel at risk.
 
-<img src="assets/screenshots/10-post-to-channel.png" alt="Settings, Post to your channel: connected to the Parth Bhadana channel, a Disconnect button, and links to YouTube's Terms of Service, Google's Privacy Policy and ClipMint's own" width="880">
+<img src="assets/screenshots/10-post-to-channel.png" alt="Settings, Post to your channel: connected to the Parth Bhadana channel, a Disconnect button, and links to YouTube's Terms of Service, Google's Privacy Policy and ClipZoneRD's own" width="880">
 
 When you connect, Google shows *"Google hasn't verified this app"* until its
-review of ClipMint is done: click **Advanced → Go to ClipMint**. While that
+review of ClipZoneRD is done: click **Advanced → Go to ClipZoneRD**. While that
 review is pending, YouTube *can* keep an upload private. It doesn't always, and
 the app tells you straight away when it does.
 
@@ -519,7 +521,7 @@ stored and where: on your PC, and nowhere else.
 ### See how your Shorts did, and learn from it
 
 With your channel connected, the library opens with **How your Shorts did**.
-ClipMint reads the views, likes and comments of every clip that's on your
+ClipZoneRD reads the views, likes and comments of every clip that's on your
 channel, including ones you uploaded yourself, which it finds by title. Then it
 says what the numbers show:
 
@@ -598,7 +600,7 @@ Sometimes YouTube stops a download and says *"Sign in to confirm you're not a
 bot"* — more often on a VPN, a shared connection, or after a lot of downloads.
 It isn't a broken link, and it no longer ends the run.
 
-ClipMint first asks again as YouTube's TV app, a phone app and the embedded
+ClipZoneRD first asks again as YouTube's TV app, a phone app and the embedded
 player, which YouTube refuses separately — that alone usually gets through, with
 nothing for you to set up. Only if none of those work does it use the YouTube
 sign-in from a browser on your computer, which is exactly what YouTube is asking
@@ -612,10 +614,10 @@ If it still stops, open **Settings → YouTube sign-in**:
   It lists what it found, and says plainly why a browser can't be used.
 - **Cookies from a browser** — pick one. On Windows, **Firefox** is the one that
   works: Chrome and Edge lock their cookies so no other program can read them.
-  On a Mac, Safari needs ClipMint allowed under *Full Disk Access*.
+  On a Mac, Safari needs ClipZoneRD allowed under *Full Disk Access*.
 - **A cookies.txt file** — export one with a browser extension and point at it,
   or skip the settings entirely: **drop the file into
-  `%APPDATA%\ClipMint\`** (or your clips folder) and it's picked up on its own.
+  `%APPDATA%\ClipZoneRD\`** (or your clips folder) and it's picked up on its own.
   The app works from its own copy, so your export is never changed.
 - **Never use cookies** — if you'd rather it didn't.
 
@@ -686,11 +688,11 @@ Every link fetches the newest release. Nothing else to install: no Python, no ff
 
 | Platform | Download | Size | Status |
 |---|---|---|---|
-| **Windows** | [**⬇ ClipMint.exe**](https://github.com/kleZ799/clipmint/releases/latest/download/ClipMint.exe) | 224 MB | Tested. Updates itself. |
-| **macOS**, Apple Silicon (M1 or later) | [**⬇ ClipMint-macOS-arm64.zip**](https://github.com/kleZ799/clipmint/releases/latest/download/ClipMint-macOS-arm64.zip) | 167 MB | **Beta.** Never run on a Mac. |
-| **Linux**, x86-64 | [**⬇ ClipMint-linux-x86_64**](https://github.com/kleZ799/clipmint/releases/latest/download/ClipMint-linux-x86_64) | 280 MB | **Untested** on a desktop. Updates itself. |
+| **Windows** | [**⬇ ClipZoneRD.exe**](https://github.com/kleZ799/clipmint/releases/latest/download/ClipZoneRD.exe) | 224 MB | Tested. Updates itself. |
+| **macOS**, Apple Silicon (M1 or later) | [**⬇ ClipZoneRD-macOS-arm64.zip**](https://github.com/kleZ799/clipmint/releases/latest/download/ClipZoneRD-macOS-arm64.zip) | 167 MB | **Beta.** Never run on a Mac. |
+| **Linux**, x86-64 | [**⬇ ClipZoneRD-linux-x86_64**](https://github.com/kleZ799/clipmint/releases/latest/download/ClipZoneRD-linux-x86_64) | 280 MB | **Untested** on a desktop. Updates itself. |
 
-Older versions and release notes are on the [releases page](https://github.com/kleZ799/clipmint/releases).
+Older versions and release notes are on the [releases page](https://github.com/yenniferramires12-jpg/clipmint/releases).
 Setup for each platform follows below.
 
 > ### ⚠️ Read this before you download the Mac build
@@ -703,7 +705,7 @@ Setup for each platform follows below.
 > So: it might not start. If it doesn't, that is a bug in this project, not
 > something you did wrong, and I want to hear about it —
 > [open an issue](https://github.com/kleZ799/clipmint/issues/new) with
-> what you saw and the contents of `~/Movies/ClipMint/app.log` if that
+> what you saw and the contents of `~/Movies/ClipZoneRD/app.log` if that
 > file exists. That is how this stops being a beta.
 >
 > **Windows is the tested build.** If you have both machines, use that one.
@@ -726,11 +728,11 @@ versions rather than installing them, so an update means downloading it again.
 **Expect step 4 to fail.** That is normal, it happens to every unsigned app,
 and it is not the beta part.
 
-**1. Download.** Take `ClipMint-macOS-arm64.zip` from the
-[latest release](https://github.com/kleZ799/clipmint/releases/latest).
+**1. Download.** Take `ClipZoneRD-macOS-arm64.zip` from the
+[latest release](https://github.com/yenniferramires12-jpg/clipmint/releases/latest).
 Apple Silicon only — an M1 or later. There is no Intel build.
 
-**2. Unzip.** Double-click the zip. You get a `ClipMint` folder with
+**2. Unzip.** Double-click the zip. You get a `ClipZoneRD` folder with
 the app in it and `READ ME FIRST.txt` beside it — the same steps as these,
 for when you come back to this in six months and the tab is long closed.
 
@@ -741,7 +743,7 @@ where updates and Spotlight expect it.
 that Apple cannot check it for malware. Nothing is damaged.
 
 **5. Allow it, once.** **System Settings → Privacy & Security**, scroll down
-to the line about ClipMint being blocked, click **Open Anyway**, confirm.
+to the line about ClipZoneRD being blocked, click **Open Anyway**, confirm.
 It opens normally every time after this. (Right-click → Open, the old shortcut
 for this, stopped working in macOS 15.)
 
@@ -751,7 +753,7 @@ There is no browser and no address bar; it is its own window.
 
 **7. Paste a Gemini key.** It asks on first run.
 [Get a free one](https://aistudio.google.com/apikey). It is stored only on your
-machine, at `~/Library/Application Support/ClipMint/settings.json`.
+machine, at `~/Library/Application Support/ClipZoneRD/settings.json`.
 
 **8. Give it a video.** Paste a YouTube URL, or drag a file straight into the
 window. Paste a *channel* URL and it lists recent videos to pick from.
@@ -761,9 +763,9 @@ window. Paste a *channel* URL and it lists recent videos to pick from.
 long, and start it. Everything from here runs on your Mac: it downloads,
 transcribes, ranks the moments, and cuts them to 9:16.
 
-**10. Find the clips.** They land in `~/Movies/ClipMint/shorts/`, in a
+**10. Find the clips.** They land in `~/Movies/ClipZoneRD/shorts/`, in a
 folder named after the video, and the app's **Reveal** button opens Finder
-right on them. Sources and transcripts go to `~/Movies/ClipMint/output/`.
+right on them. Sources and transcripts go to `~/Movies/ClipZoneRD/output/`.
 
 **11. Updating.** The app tells you when a new version is out but cannot
 install it — download the new zip and replace the app in Applications.
@@ -773,8 +775,8 @@ install it — download the new zip and replace the app in Applications.
 - **Transcribing runs on the CPU**, and it is the slow step. There is no CUDA
   on a Mac, and the transcription engine has no Metal backend, so an M-series
   CPU is doing all of it. It works; a long VOD takes a while.
-- **Files live in mac places** — `~/Movies/ClipMint` for output,
-  `~/Library/Application Support/ClipMint` for settings — instead of
+- **Files live in mac places** — `~/Movies/ClipZoneRD` for output,
+  `~/Library/Application Support/ClipZoneRD` for settings — instead of
   `Videos` and `%APPDATA%`.
 - **No self-update**, as above.
 - Everything else is the same app: same ranking, same layouts, same editing,
@@ -786,12 +788,12 @@ That part *is* the beta, and it is worth reporting. Three things help:
 
 - A screenshot, if a window opened at all. The bottom-right corner of every
   screen says which version and platform you are on.
-- `~/Movies/ClipMint/app.log` — the app writes startup errors here,
+- `~/Movies/ClipZoneRD/app.log` — the app writes startup errors here,
   including ones it has no window to show you in.
 - Running it from Terminal, so errors print where you can see them:
 
   ```bash
-  /Applications/ClipMint.app/Contents/MacOS/ClipMint
+  /Applications/ClipZoneRD.app/Contents/MacOS/ClipZoneRD
   ```
 
 [Open an issue](https://github.com/kleZ799/clipmint/issues/new) with
@@ -823,10 +825,10 @@ that your file manager opens where it should. If something is wrong, that is
 a bug here rather than something you did: [say so](https://github.com/kleZ799/clipmint/issues/new),
 with a screenshot if you can; its bottom-right corner names the version.
 
-**1. Download.** Take `ClipMint-linux-x86_64` from the
-[latest release](https://github.com/kleZ799/clipmint/releases/latest). x86-64 only — there is no ARM build.
+**1. Download.** Take `ClipZoneRD-linux-x86_64` from the
+[latest release](https://github.com/yenniferramires12-jpg/clipmint/releases/latest). x86-64 only — there is no ARM build.
 
-`ClipMint-linux-README.txt` is published beside it and says everything
+`ClipZoneRD-linux-README.txt` is published beside it and says everything
 below. A separate file rather than an archive around the binary, because the
 updater downloads that binary and swaps it into place — putting it in a
 tarball would mean teaching the update path to unwrap one on every release, to
@@ -836,8 +838,8 @@ solve what a second file solves for nothing.
 bit. That is normal and not something you did:
 
 ```bash
-chmod +x ClipMint-linux-x86_64
-./ClipMint-linux-x86_64
+chmod +x ClipZoneRD-linux-x86_64
+./ClipZoneRD-linux-x86_64
 ```
 
 **3. Wait for the first start.** It unpacks itself into `/tmp` and loads the
@@ -851,14 +853,14 @@ the terminal and works from any browser on that machine.
 
 **5. Paste a Gemini key.** It asks on first run.
 [Get a free one](https://aistudio.google.com/apikey). It is stored at
-`~/.config/ClipMint/settings.json` and goes nowhere else.
+`~/.config/ClipZoneRD/settings.json` and goes nowhere else.
 
 **6. Give it a video.** Paste a YouTube URL, or drag a file straight in. Paste
 a *channel* URL and it lists recent videos to pick from.
 
-**7. Find the clips.** They land in `~/Videos/ClipMint/shorts/`, in a
+**7. Find the clips.** They land in `~/Videos/ClipZoneRD/shorts/`, in a
 folder named after the video, and **Reveal** opens your file manager on them.
-Sources and transcripts go to `~/Videos/ClipMint/output/`.
+Sources and transcripts go to `~/Videos/ClipZoneRD/output/`.
 
 **8. Updating.** It notices new releases, checks them, and replaces itself in
 place — the same as Windows. The download above is the only one you do by hand.
@@ -878,8 +880,8 @@ place — the same as Windows. The download above is the only one you do by hand
   library path once it has started — so bundling them would ship two gigabytes
   that nothing is able to load. Windows can register those directories at
   runtime, which is the whole reason it gets the GPU and this does not.
-- **Files live in Linux places** — `~/Videos/ClipMint` for output,
-  `~/.config/ClipMint` for settings, instead of `Videos` and `%APPDATA%`.
+- **Files live in Linux places** — `~/Videos/ClipZoneRD` for output,
+  `~/.config/ClipZoneRD` for settings, instead of `Videos` and `%APPDATA%`.
 - **Finished-run notifications need `notify-send`.** Most desktops have it
   already, as part of `libnotify-bin`; KDE's `kdialog` is used instead when
   that is what is installed. With neither, the app says so in its log and
@@ -940,7 +942,7 @@ To run it: **More info → Run anyway**.
 
 - **Windows will warn you.** The exe isn't code-signed, so SmartScreen shows *"Windows protected your PC"*. Click **More info → Run anyway**. On a Mac it is Gatekeeper instead — see above.
 - **First launch is slow.** It's a single file that unpacks itself each time. The mac app is a normal bundle and starts faster.
-- **Where things go.** The key lives at `%APPDATA%\ClipMint\settings.json`; clips go to `%USERPROFILE%\Videos\ClipMint`, changeable in Settings. On a Mac: `~/Library/Application Support/ClipMint/settings.json` and `~/Movies/ClipMint`.
+- **Where things go.** The key lives at `%APPDATA%\ClipZoneRD\settings.json`; clips go to `%USERPROFILE%\Videos\ClipZoneRD`, changeable in Settings. On a Mac: `~/Library/Application Support/ClipZoneRD/settings.json` and `~/Movies/ClipZoneRD`.
 - **No key, no run.** Picking the best moments needs the free API key, so **Generate** without one opens the key box instead of starting a run that would stop after the download.
 - **ffmpeg is bundled**, so there is nothing else to install — on both platforms.
 - **The downloadable .exe transcribes on the CPU.** The CUDA runtime is 2GB, and a single-file exe re-unpacks its whole payload on every launch — so bundling it would cost every user a slow start for something only NVIDIA owners can use. If you have an NVIDIA card and want the ~5x faster transcription, build the one-folder version from source: `pip install -r requirements-nvidia.txt` then `python build_exe.py` (CUDA is the default there; `--no-cuda` opts out).
@@ -964,7 +966,7 @@ change how it works.
 
 ## Feedback
 
-Thousands of people have downloaded ClipMint and almost none have said how it
+Thousands of people have downloaded ClipZoneRD and almost none have said how it
 went. Good or bad, that is what decides what gets built next.
 
 - **[The feedback form](https://docs.google.com/forms/d/e/1FAIpQLSeKlnIdlDfNkQfgL9-qewYUmEx48OT7G8rERA9k3Sa9QHqp_g/viewform)**: two minutes, no account, anonymous
@@ -1337,7 +1339,7 @@ in `assets/playbook`, and the caption fonts and emoji in `assets/fonts` and
 `assets/emoji` are bundled either way. Drop
 `--onefile` for a folder build that starts faster but has to be zipped to share.
 
-On a Mac the same command without `--onefile` produces `dist/ClipMint.app`:
+On a Mac the same command without `--onefile` produces `dist/ClipZoneRD.app`:
 the icon is rendered from `assets/icon.png`, the version is written into
 Info.plist, and the bundle is signed ad-hoc so Apple Silicon will run it at all.
 Put static `ffmpeg` and `ffprobe` binaries in `./bin` — a Homebrew ffmpeg links
@@ -1352,7 +1354,7 @@ to build exactly what the downloads contain. Without it pip takes the newest
 version each requirement allows — that is how v1.24.1 picked up PyAV 19 and
 failed every transcription.
 
-On Linux the same `--onefile` command produces `dist/ClipMint`, with no
+On Linux the same `--onefile` command produces `dist/ClipZoneRD`, with no
 extension. Put static `ffmpeg` and `ffprobe` in `./bin` — a distribution's own
 ffmpeg links against that distribution's libraries and would only run on your
 own machine, the same trap as Homebrew on a Mac. No webview backend is bundled,
@@ -1564,7 +1566,7 @@ page in the real browser (Google refuses sign-ins inside embedded webviews),
 with a PKCE challenge, and Google redirects back to the app's own loopback
 server. The clip then goes up in 8 MB chunks. After a dropped connection the app
 asks YouTube how much arrived and carries on from there, instead of starting a
-200 MB file again. ClipMint's Google client is written into release builds from
+200 MB file again. ClipZoneRD's Google client is written into release builds from
 a GitHub secret, because YouTube's policies forbid credentials in open-source
 code.
 
@@ -1639,7 +1641,7 @@ Conflicts, when they happen, land almost entirely in `highlights.py` — upstrea
 
 MIT — see [LICENSE](LICENSE). Upstream work © Anil Chandra Naidu Matcha; modifications © Parth Bhadana.
 
-The published `ClipMint.exe` also carries ffmpeg and ffprobe (the
+The published `ClipZoneRD.exe` also carries ffmpeg and ffprobe (the
 [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) essentials build), which are licensed under the
 GPL v3 — not MIT. That covers the bundled binaries only; this repository's own
 source stays MIT, and building from source pulls in no ffmpeg at all.
@@ -1669,7 +1671,7 @@ packaging — is mine.
 
 **The footage in the screenshots** is from my own *Dying Light* stream on
 [my channel](https://www.youtube.com/@ParthBhadana799). The clips, captions,
-scores, titles and view counts are what ClipMint actually made of it and what
+scores, titles and view counts are what ClipZoneRD actually made of it and what
 YouTube actually counted; nothing was written for the demo. *Dying Light* is
 Techland's game.
 
@@ -1681,7 +1683,7 @@ Techland's game.
 
 [YouTube](https://www.youtube.com/@ParthBhadana799) &middot; [GitHub](https://github.com/kleZ799) &middot; [LinkedIn](https://www.linkedin.com/in/parth-bhadana-530014202/) &middot; [Discord](https://discord.gg/jnMrGbBz3m) &middot; [Buy me a coffee](https://buymeacoffee.com/parthbhadana)
 
-ClipMint is free, and stays free. If it saves you time,
+ClipZoneRD is free, and stays free. If it saves you time,
 [buy me a coffee](https://buymeacoffee.com/parthbhadana) — it pays for the hours that keep it working.
 
 Built and maintained by me. If you use it, fork it, or ship anything based on

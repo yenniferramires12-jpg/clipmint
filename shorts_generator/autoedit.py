@@ -119,6 +119,10 @@ _EMOJI_OF = {w: name for name, ws in EMOJI_WORDS.items() for w in ws}
 
 @dataclass
 class Options:
+    # A separate .srt subtitle file beside each clip. On by default: it is
+    # the default subtitle delivery, and burned-in captions are an option,
+    # not the default.
+    subtitles: bool = True
     captions: str = captions.OFF
     # Over the caption style: its face, colours and place (captions.look).
     caption_font: str = ""
@@ -147,8 +151,8 @@ class Options:
     @property
     def needs_words(self) -> bool:
         """Whether anything asked for depends on what is said."""
-        return (self.captions != captions.OFF or self.cut_pauses or self.punch_ins
-                or self.emoji or self.broll)
+        return (self.subtitles or self.captions != captions.OFF or self.cut_pauses
+                or self.punch_ins or self.emoji or self.broll)
 
     @property
     def anything(self) -> bool:
@@ -882,7 +886,15 @@ def polish(results: List[Dict], opts: Options, language: Optional[str] = None,
             first = (str(e).strip().splitlines() or [e.__class__.__name__])[-1][:200]
             print(f"[edit] could not edit {name} ({first}) - keeping the plain cut",
                   flush=True)
+            # The clip is the plain cut, so the subtitles use the words as
+            # heard, on the original timeline.
+            if plan.heard:
+                r["subtitle_words"] = plan.heard
             continue
+        # The words on the clip's final timeline, for the separate .srt file
+        # (written after the cold open, so its shift is accounted for).
+        if plan.caption_words:
+            r["subtitle_words"] = plan.caption_words
         if not info:
             continue
         r["edit"] = info

@@ -1,6 +1,8 @@
-/* ClipMint — YouTube's shell, one shade sharper.
+/* ClipZoneRD — YouTube's shell, in vivid Dominican colours.
    Surfaces, spacing and motion follow youtube.com so the app feels like a
    place the user has already been; the neon accents and depth are ours.
+   Electric blue #1e90ff, electric red #ff1744 and white on a deep
+   night-blue background, matching the ClipZoneRD web app.
 
    Two themes, one set of names. Everything below is a token, and the light
    theme at the bottom of this block redefines the tokens rather than
@@ -8,23 +10,23 @@
    both themes, or in neither, and cannot work in only one by accident. */
 
 :root {
-  /* YouTube dark surfaces */
-  --bg:        #0f0f0f;
-  --raised:    #181818;
-  --raised-2:  #212121;
-  --hover:     #272727;
-  --hover-2:   #3a3a3a;
-  --line:      #303030;
-  --edge:      #454545;
+  /* Deep night-blue surfaces (ClipZoneRD) */
+  --bg:        #060d1f;
+  --raised:    #0b1730;
+  --raised-2:  #10203f;
+  --hover:     #16294d;
+  --hover-2:   #1f3a66;
+  --line:      #1c3055;
+  --edge:      #2a4470;
   --text:      #f1f1f1;
   --text-2:    #aaaaaa;
   --text-3:    #717171;
 
   /* surfaces that sit *below* the page rather than above it */
-  --sunken:    #121212;
-  --sunken-2:  #0c0c0c;
-  --field:     #0f0f0f;
-  --console:   #0a0a0a;
+  --sunken:    #081226;
+  --sunken-2:  #050b1a;
+  --field:     #0a1428;
+  --console:   #050b1a;
   --console-ink: #9aa4b2;
 
   /* Whatever sits on top of the background. Every faint overlay in this file
@@ -34,10 +36,10 @@
   --fg-rgb:    255, 255, 255;
   --glass-rgb: 8, 8, 8;
 
-  --mast-bg:   rgba(15, 15, 15, .82);
+  --mast-bg:   rgba(6, 13, 31, .85);
 
-  --scroll:    #4d4d4d;
-  --scroll-h:  #6b6b6b;
+  --scroll:    #2a4470;
+  --scroll-h:  #3d5f94;
 
   /* Ink for the chrome drawn ON a video: the duration pill, the rank badge,
      the flags. Those sit on black in both themes, because a video frame is
@@ -51,15 +53,15 @@
   --on-media-fill-hover: rgba(255, 255, 255, .22);
 
   /* striped placeholders: the empty 9:16 frame, and the waveform track */
-  --ghost-a:   #1a1a1a;
-  --ghost-b:   #202020;
-  --wave-a:    #1c1c1c;
-  --wave-b:    #232323;
+  --ghost-a:   #0d1a36;
+  --ghost-b:   #12244a;
+  --wave-a:    #0e1c3a;
+  --wave-b:    #14264e;
 
   /* accents */
-  --red:       #ff0033;
-  --red-deep:  #cc0000;
-  --blue:      #3ea6ff;
+  --red:       #ff1744;
+  --red-deep:  #d5002e;
+  --blue:      #1e90ff;
   --ok:        #2ba640;
   --warn:      #ffd24d;
   --err:       #ff5c5c;
@@ -73,8 +75,8 @@
   --blue-ink:  #a9d8ff;
 
   /* how strong the aurora behind the page is */
-  --aurora-red:  .13;
-  --aurora-blue: .10;
+  --aurora-red:  .16;
+  --aurora-blue: .14;
 
   --r-sm: 8px;
   --r:    12px;
@@ -143,9 +145,9 @@
 
   /* The brand red, one notch down: #ff0033 on white is under the contrast
      floor for text, and this red is used as text as well as as a fill. */
-  --red:       #e60028;
-  --red-deep:  #b3001f;
-  --blue:      #065fd4;
+  --red:       #e5002e;
+  --red-deep:  #b30022;
+  --blue:      #0077e6;
   --ok:        #1a7f37;
   --warn:      #8a6a00;
   --err:       #c62828;
@@ -153,7 +155,7 @@
   --err-ink:   #a01919;
   --ok-ink:    #14622a;
   --warn-ink:  #6f5400;
-  --blue-ink:  #0b4ea8;
+  --blue-ink:  #005fb8;
 
   --aurora-red:  .07;
   --aurora-blue: .06;
@@ -230,7 +232,7 @@ svg { width: 24px; height: 24px; display: block; flex: 0 0 auto; }
   width: 100%;
   transform-origin: left center;
   transform: scaleX(0);
-  background: linear-gradient(90deg, var(--red), #ff6b8a, var(--red));
+  background: linear-gradient(90deg, var(--red), var(--blue), var(--red));
   box-shadow: 0 0 12px rgba(255, 0, 51, .8);
   transition: transform .4s var(--ease);
 }
@@ -297,7 +299,8 @@ svg { width: 24px; height: 24px; display: block; flex: 0 0 auto; }
   color: var(--text);
   padding-right: 6px;
 }
-.logo-mark { color: var(--red); display: grid; place-items: center; filter: drop-shadow(0 0 9px rgba(255, 0, 51, .55)); }
+.logo-mark { color: var(--red); display: grid; place-items: center; filter: drop-shadow(0 0 9px rgba(255, 23, 68, .55)); }
+.logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; box-shadow: 0 0 12px rgba(30, 144, 255, .45); }
 .logo-mark svg { width: 28px; height: 28px; }
 .logo-word { font-size: 19px; letter-spacing: -.5px; font-weight: 400; }
 .logo-word b { font-weight: 700; }
@@ -429,7 +432,7 @@ svg { width: 24px; height: 24px; display: block; flex: 0 0 auto; }
   place-items: center;
   font: 600 13px/1 var(--font);
   color: #fff;
-  background: linear-gradient(140deg, var(--red), #7a2bff);
+  background: linear-gradient(140deg, var(--red), var(--blue));
   box-shadow: 0 0 0 2px rgba(var(--fg-rgb), .07);
   cursor: default;
 }
@@ -3020,3 +3023,66 @@ body.job-paused .spin { animation-play-state: paused; opacity: .4; }
 .perf-small { color: var(--text-3); font-size: 12px; }
 .perf-err { color: var(--err-ink); }
 .clip .flag span.views { color: var(--on-media); }
+
+/* --- ClipZoneRD additions ------------------------------------------------- */
+
+/* Paste-and-go: the second button in the search row, red like the brand. */
+.search-go.paste-go {
+  width: auto; padding: 0 14px;
+  font: 600 13px/1 var(--font); color: #fff;
+  background: var(--red); border-radius: var(--pill);
+  white-space: nowrap;
+}
+.search-go.paste-go:hover { background: var(--red-deep); }
+
+/* Exact-seconds field inside the duration chip row. */
+.dur-exact {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 400 13px/1 var(--font); color: var(--text-2);
+  padding: 0 4px 0 10px;
+}
+.dur-exact input {
+  width: 64px; padding: 7px 8px;
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 500 13px/1 var(--font);
+}
+.dur-exact input:focus { outline: 2px solid var(--blue); outline-offset: 0; }
+
+/* ClipZoneRD caption style chip: blue/red Dominican gradient text. */
+.chip.cap-clipzonerd span {
+  background: linear-gradient(90deg, var(--blue), var(--red));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+
+/* --- Watched channels (Source panel) ------------------------------------- */
+.watch-add { display: flex; gap: 8px; margin: 8px 0; }
+.watch-add input {
+  flex: 1; padding: 9px 10px;
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 400 13px/1.4 var(--font);
+}
+.watch-add input:focus { outline: 2px solid var(--blue); outline-offset: 0; }
+.watch-list { display: flex; flex-direction: column; gap: 2px; }
+.watch-item { display: flex; align-items: center; gap: 6px; }
+.watch-item .watch-open {
+  flex: 1; text-align: left; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* --- Real views row (Boost panel) ---------------------------------------- */
+.views-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.views-row input[type="number"] {
+  width: 110px; padding: 9px 10px;
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 500 13px/1 var(--font);
+}
+.views-row select {
+  padding: 9px 8px;
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 500 13px/1 var(--font);
+}

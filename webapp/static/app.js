@@ -1,6 +1,6 @@
 "use strict";
 
-/* ClipMint — front end.
+/* ClipZoneRD — front end.
    Sections: helpers · chrome · setup · source · layout · run · results
              · player · trim · mini player */
 
@@ -885,7 +885,7 @@ function ytuRows(s) {
   else who = "Not connected";
   rows.push(`<div><span>Channel</span><b>${esc(I18N.t(who))}</b></div>`);
   const client = s.client === "yours" ? "Your own"
-    : s.client === "builtin" ? "ClipMint's" : "None set up yet";
+    : s.client === "builtin" ? "ClipZoneRD's" : "None set up yet";
   rows.push(`<div><span>Google client</span><b>${esc(I18N.t(client))}</b></div>`);
   return rows.join("");
 }
@@ -895,9 +895,9 @@ function ytuRows(s) {
 function unverifiedNote(s) {
   const whose = s.client === "yours"
     ? "your own Google client isn't verified by Google"
-    : "ClipMint hasn't finished Google's app verification yet";
+    : "ClipZoneRD hasn't finished Google's app verification yet";
   return I18N.t(`Google will show a “Google hasn't verified this app” warning. That's because `
-    + `${whose}, not because anything is wrong. Click Advanced, then Go to ClipMint (unsafe), `
+    + `${whose}, not because anything is wrong. Click Advanced, then Go to ClipZoneRD (unsafe), `
     + `to carry on. The app still only gets permission to upload.`);
 }
 
@@ -972,7 +972,7 @@ $("ytuConnect").onclick = connectYouTube;
 
 $("ytuDisconnect").onclick = () => {
   ask("Disconnect YouTube?",
-      "ClipMint gives its upload permission back to Google. Videos already uploaded stay "
+      "ClipZoneRD gives its upload permission back to Google. Videos already uploaded stay "
       + "exactly where they are.",
       async () => {
         try {
@@ -1952,7 +1952,7 @@ async function showVersion() {
     $("wVer").textContent = "v" + d.version;
     $("gVer").textContent = "Version " + d.version;
     $("topVer").textContent = "v" + d.version;
-    $("verMark").textContent = "ClipMint v" + d.version + (d.platform ? " · " + d.platform : "");
+    $("verMark").textContent = "ClipZoneRD v" + d.version + (d.platform ? " · " + d.platform : "");
   } catch (e) { /* the number is not worth an error */ }
 }
 showVersion();
@@ -2350,7 +2350,57 @@ $("drop").addEventListener("drop", (e) => {
   if (f) uploadFile(f);
 });
 
+// Watched channels: the channels followed, one tap to their latest videos.
+async function loadWatched() {
+  const list = $("watchList");
+  if (!list) return;
+  try {
+    const d = await api("/api/watched");
+    const channels = d.channels || [];
+    list.innerHTML = channels.length ? channels.map((url) => `
+      <div class="watch-item">
+        <button class="linkish watch-open" data-url="${esc(url)}">${esc(url)}</button>
+        <button class="ibtn sm watch-del" data-url="${esc(url)}" title="Stop watching"><svg><use href="#i-close"/></svg></button>
+      </div>`).join("") : `<p class="perf-small">No channels watched yet.</p>`;
+    list.querySelectorAll(".watch-open").forEach((b) => b.onclick = async () => {
+      $("url").value = b.dataset.url;
+      $("urlClear").classList.remove("hidden");
+      await loadUrl();
+    });
+    list.querySelectorAll(".watch-del").forEach((b) => b.onclick = async () => {
+      await api("/api/watched/remove", json("POST", { url: b.dataset.url }));
+      loadWatched();
+    });
+  } catch (_) { /* the list is a nicety — never block on it */ }
+}
+if ($("watchAdd")) $("watchAdd").onclick = async () => {
+  const url = $("watchUrl").value.trim();
+  if (!url) return;
+  try {
+    await api("/api/watched", json("POST", { url }));
+    $("watchUrl").value = "";
+    loadWatched();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+loadWatched();
+
 $("load").onclick = loadUrl;
+$("pasteGo").onclick = async () => {
+  // Paste and go: read the clipboard, load the link, and start cutting with
+  // the current settings — save, find moments and score all in one action.
+  // A channel link stops at the video picker, so it never starts on the
+  // wrong video.
+  let text = "";
+  try { text = await navigator.clipboard.readText(); } catch (_) { /* no permission */ }
+  if (text) {
+    $("url").value = text.trim();
+    $("urlClear").classList.remove("hidden");
+  }
+  await loadUrl();
+  if (source) run();
+};
 $("url").addEventListener("keydown", (e) => { if (e.key === "Enter") loadUrl(); });
 $("url").addEventListener("input", () =>
   $("urlClear").classList.toggle("hidden", !$("url").value));
@@ -2402,6 +2452,19 @@ function drawPreview(spec, summary, notes, warning) {
 let aspectChoice = "";
 // Same for the kind of video: "" leaves it to the words, then to the ranker.
 let kindChoice = "";
+// ClipZoneRD: the clip length ("": auto; a number: exact seconds) and the
+// framing ("": auto; stacked = Dividida, facetrack, center).
+let durationChoice = "";
+let layoutChoice = "";
+function durationSeconds() {
+  const exact = ($("durExact") && $("durExact").value.trim()) || "";
+  if (exact) return Number(exact);
+  return durationChoice ? Number(durationChoice) : null;
+}
+function platName(p) {
+  return { youtube: "YouTube", tiktok: "TikTok", facebook: "Facebook",
+           instagram: "Instagram" }[String(p || "").toLowerCase()] || "YouTube";
+}
 
 // The prompt is read twice. While someone types, by the keyword pass alone,
 // which is instant and free. Once they stop, by the model, which reads it
@@ -2421,7 +2484,9 @@ async function refreshPreview(useModel = true, tries = 0) {
   try {
     const d = await api("/api/layout/preview", json("POST", {
       prompt: $("prompt").value, use_llm: useModel, aspect_ratio: aspectChoice || null,
-      content_kind: kindChoice || null, ...editChoice,
+      content_kind: kindChoice || null,
+      duration_seconds: durationSeconds(), monetize: $("monetize").checked,
+      layout: layoutChoice || null, ...editChoice,
     }));
     // A newer prompt, or the model's reading of this one, is already on its way.
     if (seq !== promptSeq || (!useModel && modelSeq === seq)) return;
@@ -2815,6 +2880,39 @@ $("kindBar").onclick = (e) => {
   refreshPreview();
 };
 
+// Clip length: a shortcut chip, or the exact-seconds field (which wins).
+$("durBar").onclick = (e) => {
+  const btn = e.target.closest("[data-dur]");
+  if (!btn) return;
+  durationChoice = btn.dataset.dur;
+  if ($("durExact")) $("durExact").value = "";
+  for (const b of $("durBar").querySelectorAll(".chip")) b.classList.toggle("on", b === btn);
+  refreshPreview();
+};
+if ($("durExact")) $("durExact").addEventListener("input", () => {
+  if ($("durExact").value.trim()) {
+    durationChoice = "";
+    for (const b of $("durBar").querySelectorAll(".chip")) b.classList.toggle("on", false);
+  } else {
+    durationChoice = "";
+    const auto = $("durBar").querySelector('[data-dur=""]');
+    if (auto) auto.classList.add("on");
+  }
+  refreshPreview();
+});
+
+// Framing: Dividida (gamer on top, game below), face tracking, or centred.
+$("layoutBar").onclick = (e) => {
+  const btn = e.target.closest("[data-layout]");
+  if (!btn) return;
+  layoutChoice = btn.dataset.layout;
+  for (const b of $("layoutBar").querySelectorAll(".chip")) b.classList.toggle("on", b === btn);
+  refreshPreview();
+};
+
+// Monetization mode: only moments longer than 1 minute, so the clip can earn.
+if ($("monetize")) $("monetize").addEventListener("change", refreshPreview);
+
 $("chips").innerHTML = EXAMPLES.map((e) =>
   `<button class="chip" data-t="${esc(e)}">${esc(e)}</button>`).join("");
 
@@ -2868,6 +2966,9 @@ async function run() {
       language: $("spokenLang").value,
       aspect_ratio: aspectChoice || null,
       content_kind: kindChoice || null,
+      duration_seconds: durationSeconds(),
+      monetize: $("monetize").checked,
+      layout: layoutChoice || null,
       hook_replay: $("hookReplay").checked,
       ...editChoice,
     }));
@@ -3474,7 +3575,7 @@ function openPlayer(i) {
     c.score != null ? (c.scorecard ? `${c.scorecard.grade.label} · score ${c.score}`
                                    : `score ${c.score}`) : "",
     c.muted ? "muted" : "",
-    c.performance ? `${Number(c.performance.views).toLocaleString()} views on YouTube` : "",
+    c.performance ? `${Number(c.performance.views).toLocaleString()} views on ${platName(c.performance.platform)}` : "",
   ].filter(Boolean).join(" · ");
   renderWhy(c);
   $("pDownload").href = c.url;
@@ -3719,11 +3820,26 @@ function renderSeo() {
         ).join("")}</div>
       </div>` : "")
     + seoField("On-screen hook for the first 2 seconds", "sfHook", seo.hook_text)
+    + optionList("Hook options — 5 hooks for the first 3 seconds, tap one to use it", "hopt",
+                 (seo.hook_options || []).map((h, i) => ({ hook_text: h, score: i + 1 })),
+                 seo.hook_text, "hook_text")
     + (seo.search_phrase
         ? `<p class="seo-why"><b>Ranks for:</b> ${esc(seo.search_phrase)}</p>` : "")
     + (seo.why_it_works
         ? `<p class="seo-why"><b>Why this one travels:</b> ${esc(seo.why_it_works)}</p>` : "")
     + uploadBox()
+    + `<div class="sf"><div class="sf-top"><span>Real views — how this clip actually did</span></div>
+        <div class="views-row">
+          <input type="number" id="sfViews" min="0" step="1" placeholder="Views"
+            value="${esc(String((c.performance && c.performance.views) ?? ""))}">
+          <select id="sfViewsPlatform">
+            ${["youtube", "tiktok", "facebook", "instagram"].map((p) =>
+              `<option value="${p}"${((c.performance && c.performance.platform) || "youtube") === p ? " selected" : ""}>${platName(p)}</option>`).join("")}
+          </select>
+          <button class="btn ghost sm" id="sfViewsSave">Save views</button>
+        </div>
+        <p class="sf-hint">Enter the real view count from where you published it. It feeds the totals above, and the ranking learns from it.</p>
+      </div>`
     + `</div>`
 
     // ---- Instagram Reels
@@ -3824,6 +3940,31 @@ function renderSeo() {
   wireOptions("topt", options, "title", "sfTitle");
   wireOptions("dopt", descOptions, "description", "sfDesc");
   wireOptions("copt", capOptions, "caption", "sfIgCaption");
+  wireOptions("hopt", (seo.hook_options || []).map((h, i) => ({ hook_text: h, score: i + 1 })),
+              "hook_text", "sfHook");
+
+  // Real views, entered by hand: the count and the platform it came from.
+  const viewsSave = $("sfViewsSave");
+  if (viewsSave) viewsSave.onclick = async () => {
+    const n = Number(($("sfViews") || {}).value);
+    if (!Number.isFinite(n) || n < 0) { toast("Enter a view count first.", true); return; }
+    viewsSave.disabled = true;
+    viewsSave.textContent = "Saving…";
+    try {
+      const d = await api(
+        `/api/jobs/${encodeURIComponent(jobOf(c))}/clips/${encodeURIComponent(c.file)}/views`,
+        json("POST", { views: Math.round(n), platform: $("sfViewsPlatform").value }));
+      patchClip(cur, { performance: d.clip.performance });
+      loadPerformance();
+      loadLibrary();
+      toast("Views saved.");
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      viewsSave.disabled = false;
+      viewsSave.textContent = "Save views";
+    }
+  };
 
   // The chips and the tag box are one list seen two ways: toggling a chip
   // edits the box, and typing in the box relights the chips.
@@ -4568,6 +4709,22 @@ async function loadPerformance() {
   return perf;
 }
 
+// Views learning: totals over every clip with a count, the most-viewed
+// clip, and the split by platform — from YouTube's numbers and from the
+// counts entered by hand.
+function perfTotals(a) {
+  if (!((a.with_views || 0) > 0)) return "";
+  const parts = [];
+  parts.push(`<b>${fmtViews(a.total_views || 0)}</b> ${esc(I18N.t("total views"))} · ${a.with_views} ${esc(I18N.t(a.with_views === 1 ? "clip" : "clips"))}`);
+  if (a.most_viewed) {
+    parts.push(`${esc(I18N.t("Most viewed"))}: ${esc(a.most_viewed.title || "")} — <b>${fmtViews(a.most_viewed.views)}</b> (${esc(platName(a.most_viewed.platform))})`);
+  }
+  const by = a.by_platform || {};
+  const platBits = Object.entries(by).map(([p, v]) => `${esc(platName(p))} ${fmtViews(v.views)}`).join(" · ");
+  if (platBits) parts.push(platBits);
+  return `<p class="perf-stats">${parts.join(" · ")}</p>`;
+}
+
 function renderPerformance() {
   const box = $("perf");
   if (!perf) { box.classList.add("hidden"); return; }
@@ -4581,7 +4738,8 @@ function renderPerformance() {
     ? `${I18N.t("Checked")} ${perfAgo(Date.parse(chk.checked_at) / 1000)}` : "";
 
   if (!perf.connected) {
-    $("perfBody").innerHTML = `<p>${esc(I18N.t("Connect your YouTube channel in Settings to see how the Shorts you post actually do, and let that tune the ranking."))}</p>
+    $("perfBody").innerHTML = perfTotals(a)
+      + `<p>${esc(I18N.t("Connect your YouTube channel in Settings to see how the Shorts you post actually do, and let that tune the ranking."))}</p>
       <button class="btn ghost sm" id="perfConnect">${esc(I18N.t("Open Settings"))}</button>`;
     $("perfConnect").onclick = openDrawer;
     return;
@@ -4599,6 +4757,7 @@ function renderPerformance() {
   bits.push(`<p class="perf-stats">${a.clips} ${esc(I18N.t(a.clips === 1 ? "clip" : "clips"))} ${esc(I18N.t("on YouTube"))}`
     + (a.median_views != null ? ` · ${esc(I18N.t("median"))} ${fmtViews(a.median_views)} ${esc(I18N.t("views"))}` : "")
     + (a.waiting ? ` · ${a.waiting} ${esc(I18N.t("more are under two days old"))}` : "") + `</p>`);
+  bits.push(perfTotals(a));
 
   const shown = (a.findings || []).filter((f) => f.verdict !== "none");
   const quiet = (a.findings || []).filter((f) => f.verdict === "none");

@@ -5,7 +5,7 @@ that is on the connected channel it fetches the views, likes and comments, and
 keeps them on the clip, where shorts_generator/performance.py can learn from
 them and the library can show them.
 
-Finding a clip's video. A clip uploaded from ClipMint carries its video's id.
+Finding a clip's video. A clip uploaded from ClipZoneRD carries its video's id.
 A clip someone uploaded by hand does not, so the channel's list of uploads is
 read and matched by title: the clip's file is named after its title, and the
 title box is what went into YouTube's title box. Only videos published after
@@ -146,7 +146,7 @@ def match(jobs, videos: List[Dict]) -> Dict[tuple, Dict]:
         by_title.setdefault(norm_title(v["title"]), []).append(v)
     taken = set()
     out: Dict[tuple, Dict] = {}
-    # Uploads made from ClipMint first: they are certain, and a title match must
+    # Uploads made from ClipZoneRD first: they are certain, and a title match must
     # never hand their video to some other clip.
     for job in jobs:
         for c in job.clips:

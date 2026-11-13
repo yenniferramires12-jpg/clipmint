@@ -356,6 +356,28 @@ window.I18N = (function () {
     // ---------------------------------------------------------------- Español
     es: {
       "Create": "Crear",
+      "Clip length. How long each clip runs": "Duración del clip. Cuánto dura cada clip",
+      "Exact seconds": "Segundos exactos",
+      "Framing. How the clip is laid out": "Encuadre. Cómo se compone el clip",
+      "Dividida — gamer on top, game below": "Dividida — gamer arriba, juego abajo",
+      "Face tracking": "Seguimiento de cara",
+      "Centered": "Centrado",
+      "Monetization mode — only moments longer than 1 minute, so the clip can earn on TikTok and YouTube": "Modo monetización — solo momentos de más de 1 minuto, para que el clip pueda ganar en TikTok y YouTube",
+      "Captions. Burned in, the spoken word lit up — off by default: every clip also ships with a separate subtitle file": "Subtítulos. Quemados en el video, con la palabra hablada iluminada — apagados por defecto: cada clip también trae su propio archivo de subtítulos",
+      "Based on ClipMint by": "Basado en ClipMint de",
+      "Paste and go — load the link and start cutting in one step": "Pegar y listo — carga el enlace y empieza a cortar en un solo paso",
+      "Watched channels": "Canales seguidos",
+      "Channels you follow — one tap to see their latest videos": "Canales que sigues — un toque para ver sus últimos videos",
+      "Paste a channel link to watch it": "Pega el enlace de un canal para seguirlo",
+      "Watch": "Seguir",
+      "No channels watched yet.": "Aún no sigues ningún canal.",
+      "Total views": "Vistas totales",
+      "Most viewed": "Más visto",
+      "Real views — how this clip actually did": "Vistas reales — cómo le fue a este clip",
+      "Save views": "Guardar vistas",
+      "Enter the real view count from where you published it. It feeds the totals above, and the ranking learns from it.": "Escribe las vistas reales de donde lo publicaste. Alimentan los totales y la clasificación aprende de ellas.",
+      "Views saved.": "Vistas guardadas.",
+      "Enter a view count first.": "Escribe primero la cantidad de vistas.",
       "What to make": "Qué crear",
       "Your clips": "Tus clips",
       "Settings": "Ajustes",
@@ -2387,10 +2409,11 @@ window.I18N = (function () {
 
   const STORE_KEY = "ui-lang";
 
-  // English on a fresh install, always. The browser's own locale is
-  // deliberately not consulted: a machine set to another language would
-  // otherwise hand a first-run user an interface nobody chose.
-  let lang = "en";
+  // Spanish on a fresh install, always: ClipZoneRD is a Spanish-first app.
+  // The browser's own locale is deliberately not consulted: a machine set
+  // to another language would otherwise hand a first-run user an interface
+  // nobody chose.
+  let lang = "es";
   try {
     const saved = localStorage.getItem(STORE_KEY);
     if (saved && (saved === "en" || DICT[saved])) lang = saved;

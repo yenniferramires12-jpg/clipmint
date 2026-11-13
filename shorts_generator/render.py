@@ -121,7 +121,175 @@ def render_highlights(
     _edit(results, spec, language, kind, llm_fn)
     if spec.hook_replay:
         _add_hook_openings(results)
+    _append_outro(results, out_w, out_h)
+    _write_subtitles(results)
     return results
+
+
+# ClipZoneRD's animated outro, appended to the end of every rendered clip.
+OUTRO_FILE = "outro-animated-v5.mp4"
+
+
+def _outro_path() -> Optional[str]:
+    """The bundled outro file, from the build or the repo, or None."""
+    from . import bundled
+    d = bundled.asset_dir("outro")
+    if d is not None:
+        p = d / OUTRO_FILE
+        if p.is_file():
+            return str(p)
+    p = os.path.join(os.path.dirname(__file__), "..", "assets", "outro", OUTRO_FILE)
+    p = os.path.normpath(p)
+    return p if os.path.isfile(p) else None
+
+
+def _probe_clip(path: str, out_w: int = 720, out_h: int = 1280) -> tuple:
+    """(width, height, fps, has_audio) for a rendered clip, via ffprobe.
+
+    Never raises: on any failure it reports the size the render was asked
+    for, 30fps, with audio.
+    """
+    width, height, fps, has_audio = out_w, out_h, 30.0, True
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height,avg_frame_rate",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=15).stdout.strip()
+        parts = out.split(",")
+        if len(parts) >= 2:
+            width, height = int(parts[0]), int(parts[1])
+        if len(parts) >= 3 and "/" in parts[2]:
+            num, den = parts[2].split("/", 1)
+            fps = float(num) / float(den) if float(den) else 30.0
+    except Exception:
+        pass
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream=codec_type",
+             "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=15).stdout.strip()
+        has_audio = out == "audio"
+    except Exception:
+        pass
+    return width, height, fps, has_audio
+
+
+def _append_outro(results: List[Dict], out_w: int, out_h: int) -> None:
+    """Append the ClipZoneRD outro to every rendered clip, in place.
+
+    The outro is scaled to the clip's own size (pillarboxed when the clip
+    is not 9:16) and concatenated after it, audio and all — the clip's own
+    video is never re-scaled, so joining cannot cost it quality. A clip that
+    cannot be joined keeps its plain cut and says why in the log — the
+    outro is never worth losing a clip over.
+    """
+    outro = _outro_path()
+    if outro is None:
+        print("[outro] bundled outro not found — clips ship without it", flush=True)
+        return
+    for r in results:
+        path = r.get("clip_url")
+        if not path or not os.path.exists(path):
+            continue
+        clip_w, clip_h, fps, has_audio = _probe_clip(path, out_w, out_h)
+        fps_s = f"{fps:.2f}".rstrip("0").rstrip(".")
+        audio0 = ("[0:a]aresample=48000,aformat=channel_layouts=stereo[a0]"
+                  if has_audio else
+                  "anullsrc=channel_layout=stereo:sample_rate=48000[a0]")
+        filt = (
+            "[0:v]setsar=1,format=yuv420p[v0];"
+            f"[1:v]scale={clip_w}:{clip_h}:force_original_aspect_ratio=decrease,"
+            f"pad={clip_w}:{clip_h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps_s},"
+            "format=yuv420p[v1];"
+            f"{audio0};"
+            "[1:a]aresample=48000,aformat=channel_layouts=stereo[a1];"
+            "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"
+        )
+        tmp = path + ".outro.mp4"
+        try:
+            accel.run_encode(lambda enc: [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-i", path, "-i", outro,
+                "-filter_complex", filt,
+                "-map", "[v]", "-map", "[a]",
+                *enc,
+                "-c:a", "aac", "-b:a", "160k",
+                "-movflags", "+faststart",
+                tmp,
+            ], what="ffmpeg (append outro)", crf=23)
+            os.replace(tmp, path)
+            r["outro"] = True
+        except Exception as e:  # noqa: BLE001 - a plain clip beats no clip
+            first = (str(e).strip().splitlines() or [e.__class__.__name__])[-1][:200]
+            print(f"[outro] could not append to {os.path.basename(path)} "
+                  f"({first}) — keeping the plain cut", flush=True)
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+
+
+def _srt_timestamp(seconds: float) -> str:
+    """Seconds -> an SRT timestamp (HH:MM:SS,mmm)."""
+    ms = max(0, int(round(float(seconds) * 1000)))
+    h, ms = divmod(ms, 3_600_000)
+    m, ms = divmod(ms, 60_000)
+    sec, ms = divmod(ms, 1000)
+    return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
+
+
+def _write_subtitles(results: List[Dict]) -> None:
+    """Write a separate .srt subtitle file beside every rendered clip.
+
+    The words come from the edit pass, on the clip's final timeline, shifted
+    by the cold open when one was added. The .srt is the default subtitle
+    delivery — burned-in captions are an option, not the default — so it is
+    written even when burned-in captions are off.
+    """
+    for r in results:
+        path = r.get("clip_url")
+        words = r.get("subtitle_words")
+        if not path or not os.path.exists(path) or not words:
+            continue
+        shift = float(r.get("hook_replay_seconds") or 0.0)
+        # Group the words into cues: up to 5 words, 2.5s, ~84 characters.
+        cues = []
+        cur = []
+        for w in words:
+            try:
+                start, end, text = float(w["start"]), float(w["end"]), str(w["word"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if cur and (len(cur) >= 5
+                        or end - float(cur[0]["start"]) > 2.5
+                        or sum(len(c["word"]) for c in cur) + len(text) > 84):
+                cues.append(cur)
+                cur = []
+            cur.append({"start": start, "end": end, "word": text})
+        if cur:
+            cues.append(cur)
+        if not cues:
+            continue
+        root, _ = os.path.splitext(path)
+        srt_path = root + ".srt"
+        try:
+            with open(srt_path, "w", encoding="utf-8") as f:
+                n = 0
+                for cue in cues:
+                    start = float(cue[0]["start"]) + shift
+                    end = float(cue[-1]["end"]) + shift
+                    text = " ".join(c["word"] for c in cue).strip()
+                    if not text or end <= start:
+                        continue
+                    n += 1
+                    f.write(f"{n}\n{_srt_timestamp(start)} --> "
+                            f"{_srt_timestamp(end)}\n{text}\n\n")
+            r["subtitles"] = os.path.basename(srt_path)
+        except OSError as e:
+            print(f"[subtitles] could not write {srt_path} ({e})", flush=True)
 
 
 def _edit(results: List[Dict], spec: LayoutSpec, language: Optional[str],

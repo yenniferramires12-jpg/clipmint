@@ -86,6 +86,16 @@ PRESETS: Dict[str, Dict] = {
         "primary": "FFFFFF", "active": "FFD43B", "edge": "3B1F6E",
         "upper": True, "words": 3, "chars": 18, "pop": True, "box": False,
     },
+    # ClipZoneRD's own style: white type, the spoken word in electric red
+    # #ff1744, a deep night-blue edge — the app's Dominican colours.
+    "clipzonerd": {
+        "label": "ClipZoneRD",
+        "hint": "Dominican colours: white type, the spoken word in electric red",
+        "font": "Montserrat ExtraBold", "file": "Montserrat-ExtraBold.ttf",
+        "size": 0.084, "outline": 0.0095, "shadow": 0.004, "spacing": 0,
+        "primary": "FFFFFF", "active": "FF1744", "edge": "0A1428",
+        "upper": True, "words": 3, "chars": 18, "pop": True, "box": False,
+    },
 }
 
 CHOICES = (OFF, *PRESETS)

@@ -452,11 +452,11 @@ def _explain_probe_failure(browser: str, err: Exception) -> str:
             # way. Closing the browser does nothing for this one.
             if browser == "safari":
                 return ("macOS keeps Safari's cookies behind Full Disk Access. "
-                        "Allow ClipMint in System Settings → Privacy & Security "
+                        "Allow ClipZoneRD in System Settings → Privacy & Security "
                         "→ Full Disk Access, then open it again — or sign in "
                         "to YouTube in Firefox instead.")
             return (f"macOS wouldn't let the app read {name}'s cookies. Allow "
-                    f"ClipMint under System Settings → Privacy & Security → "
+                    f"ClipZoneRD under System Settings → Privacy & Security → "
                     f"Full Disk Access, then open it again.")
         system = "Windows" if sys.platform in ("win32", "cygwin") else "The system"
         return (f"{system} wouldn't let the app read {name}'s cookies. "
@@ -671,7 +671,7 @@ def _why_browsers_refuse() -> str:
     if sys.platform in ("win32", "cygwin"):
         return "on Windows, Chrome and Edge lock theirs so only they can read them."
     if sys.platform == "darwin":
-        return ("on a Mac, Safari's are behind Full Disk Access, which ClipMint "
+        return ("on a Mac, Safari's are behind Full Disk Access, which ClipZoneRD "
                 "doesn't have unless you allow it in System Settings.")
     return "usually because no browser here is signed in to YouTube."
 

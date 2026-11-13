@@ -65,11 +65,11 @@ API_LATEST = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
 MAC = sys.platform == "darwin"
 LINUX = sys.platform.startswith("linux")
 if MAC:
-    ASSET_NAME = "ClipMint-macOS-arm64.zip"
+    ASSET_NAME = "ClipZoneRD-macOS-arm64.zip"
 elif LINUX:
-    ASSET_NAME = "ClipMint-linux-x86_64"
+    ASSET_NAME = "ClipZoneRD-linux-x86_64"
 else:
-    ASSET_NAME = "ClipMint.exe"
+    ASSET_NAME = "ClipZoneRD.exe"
 
 # GitHub serves release downloads off its own domains and redirects between
 # them. Anything else means the API response was not what we think it was, so
@@ -81,7 +81,7 @@ ALLOWED_HOSTS = {
     "release-assets.githubusercontent.com",
 }
 
-USER_AGENT = f"ClipMint/{APP_VERSION}"
+USER_AGENT = f"ClipZoneRD/{APP_VERSION}"
 NETWORK_TIMEOUT = 20
 
 # The file the previous version was renamed to, cleaned up on next launch.

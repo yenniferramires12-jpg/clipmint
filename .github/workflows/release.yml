@@ -1,6 +1,6 @@
 # Builds the app for Windows and macOS and publishes both as one release.
 #
-#     git tag -a v1.6.0 -m "ClipMint v1.6.0"
+#     git tag -a v1.0.0 -m "ClipZoneRD v1.0.0"
 #     git push origin v1.6.0
 #
 # That is the whole release. Or, with no terminal: Actions -> Release -> Run
@@ -207,16 +207,16 @@ jobs:
       # time for something only NVIDIA owners can use.
       - name: Build the exe
         env:
-          # ClipMint's Google client for YouTube uploads. A secret, never a
+          # ClipZoneRD's Google client for YouTube uploads. A secret, never a
           # file in the repo: YouTube's API policies forbid credentials in open
           # source projects. Unset, the build still works and users bring their own.
-          CLIPMINT_YOUTUBE_CLIENT: ${{ secrets.CLIPMINT_YOUTUBE_CLIENT }}
+          CLIPZONERD_YOUTUBE_CLIENT: ${{ secrets.CLIPZONERD_YOUTUBE_CLIENT }}
         run: python build_exe.py --onefile
 
       - name: Check the built exe reports the right version
         shell: pwsh
         run: |
-          $exe = "dist/ClipMint.exe"
+          $exe = "dist/ClipZoneRD.exe"
           if (-not (Test-Path $exe)) { throw "the build produced no exe" }
           $v = (Get-Item $exe).VersionInfo.FileVersion
           # A dry run has no tag to check against, so the exe is held to what
@@ -243,8 +243,8 @@ jobs:
         if: steps.tag.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ClipMint-windows
-          path: dist/ClipMint.exe
+          name: ClipZoneRD-windows
+          path: dist/ClipZoneRD.exe
           retention-days: 7
 
       - name: Publish the release
@@ -255,13 +255,7 @@ jobs:
         run: |
           tag="${{ steps.tag.outputs.name }}"
           notes="docs/release-notes/${tag}.md"
-          args=(--title "ClipMint ${tag}")
-          # Every install from v1.5.0 to v1.14.1 asks the API for an asset
-          # named StreamToShorts.exe and goes quiet when it is not there. A
-          # byte-identical copy under the old name is what keeps those users
-          # on the update path instead of stranding them on the build they
-          # have. It can go once the download count for it stops moving.
-          cp dist/ClipMint.exe dist/StreamToShorts.exe
+          args=(--title "ClipZoneRD ${tag}")
           if [ -f "$notes" ]; then
             echo "using $notes"
             args+=(--notes-file "$notes")
@@ -272,9 +266,9 @@ jobs:
           # Re-running a release should update it, not fail on "already exists".
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "release exists — replacing the asset"
-            gh release upload "$tag" dist/ClipMint.exe dist/StreamToShorts.exe --clobber
+            gh release upload "$tag" dist/ClipZoneRD.exe --clobber
           else
-            gh release create "$tag" dist/ClipMint.exe dist/StreamToShorts.exe "${args[@]}"
+            gh release create "$tag" dist/ClipZoneRD.exe "${args[@]}"
           fi
 
       - name: Summary
@@ -285,13 +279,13 @@ jobs:
             if [ "${{ steps.tag.outputs.publish }}" = "true" ]; then
               echo "### Released $tag"
               echo ""
-              echo "- \`ClipMint.exe\` — SHA-256 \`$SHA256\`"
+              echo "- \`ClipZoneRD.exe\` — SHA-256 \`$SHA256\`"
               echo "- Every installed copy from v1.5.0 onward will offer this build."
               echo "- <https://github.com/${{ github.repository }}/releases/tag/$tag>"
             else
               echo "### Dry run — Windows build (nothing published)"
               echo ""
-              echo "- \`ClipMint.exe\` — SHA-256 \`$SHA256\`"
+              echo "- \`ClipZoneRD.exe\` — SHA-256 \`$SHA256\`"
               echo "- Attached to this run for 7 days. No release was created or touched."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
@@ -415,15 +409,15 @@ jobs:
       # makes it launchable on Apple Silicon at all.
       - name: Build the app
         env:
-          # ClipMint's Google client for YouTube uploads. A secret, never a
+          # ClipZoneRD's Google client for YouTube uploads. A secret, never a
           # file in the repo: YouTube's API policies forbid credentials in open
           # source projects. Unset, the build still works and users bring their own.
-          CLIPMINT_YOUTUBE_CLIENT: ${{ secrets.CLIPMINT_YOUTUBE_CLIENT }}
+          CLIPZONERD_YOUTUBE_CLIENT: ${{ secrets.CLIPZONERD_YOUTUBE_CLIENT }}
         run: python build_exe.py
 
       - name: Check the built app is what it claims to be
         run: |
-          app="dist/ClipMint.app"
+          app="dist/ClipZoneRD.app"
           if [ ! -d "$app" ]; then
             echo "::error::the build produced no .app"
             exit 1
@@ -475,7 +469,7 @@ jobs:
         run: |
           set -e
           rm -rf stage
-          mkdir -p stage/ClipMint
+          mkdir -p stage/ClipZoneRD
           need() {
           if [ ! -f "$1" ]; then
             echo "::error::$1 is missing from this checkout."
@@ -487,29 +481,28 @@ jobs:
           }
           need docs/install/macos.txt
 
-          ditto dist/ClipMint.app stage/ClipMint/ClipMint.app
-          cp docs/install/macos.txt "stage/ClipMint/READ ME FIRST.txt"
+          ditto dist/ClipZoneRD.app stage/ClipZoneRD/ClipZoneRD.app
+          cp docs/install/macos.txt "stage/ClipZoneRD/READ ME FIRST.txt"
 
           # The copy still has to be the app that was signed a step ago.
-          codesign --verify --deep --strict stage/ClipMint/ClipMint.app
+          codesign --verify --deep --strict stage/ClipZoneRD/ClipZoneRD.app
 
           ditto -c -k --sequesterRsrc --keepParent \
-            stage/ClipMint ClipMint-macOS-arm64.zip
-          ls -lh ClipMint-macOS-arm64.zip
+            stage/ClipZoneRD ClipZoneRD-macOS-arm64.zip
+          ls -lh ClipZoneRD-macOS-arm64.zip
           # The pre-rename name, for installs whose updater still asks
           # for it. A mac build cannot replace itself, so this copy is
           # what makes the "there is a new version" notice appear for
           # them at all.
-          cp ClipMint-macOS-arm64.zip StreamToShorts-macOS-arm64.zip
-          shasum -a 256 ClipMint-macOS-arm64.zip
-          echo "SHA256=$(shasum -a 256 ClipMint-macOS-arm64.zip | cut -d' ' -f1)" >> "$GITHUB_ENV"
+                    shasum -a 256 ClipZoneRD-macOS-arm64.zip
+          echo "SHA256=$(shasum -a 256 ClipZoneRD-macOS-arm64.zip | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
       - name: Attach the build to this run instead
         if: steps.tag.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ClipMint-macos-arm64
-          path: ClipMint-macOS-arm64.zip
+          name: ClipZoneRD-macos-arm64
+          path: ClipZoneRD-macOS-arm64.zip
           retention-days: 7
 
       - name: Add it to the release
@@ -518,8 +511,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ steps.tag.outputs.name }}" \
-            ClipMint-macOS-arm64.zip \
-            StreamToShorts-macOS-arm64.zip --clobber
+            ClipZoneRD-macOS-arm64.zip --clobber
 
       - name: Summary
         run: |
@@ -530,8 +522,8 @@ jobs:
               echo "### Dry run — macOS build (nothing published)"
             fi
             echo ""
-            echo "- \`ClipMint-macOS-arm64.zip\` — SHA-256 \`$SHA256\`"
-            echo "- Unzips to a **ClipMint** folder: the app, and"
+            echo "- \`ClipZoneRD-macOS-arm64.zip\` — SHA-256 \`$SHA256\`"
+            echo "- Unzips to a **ClipZoneRD** folder: the app, and"
             echo "  \`READ ME FIRST.txt\` explaining the first launch it is about"
             echo "  to be refused by."
             echo "- **Never run on a Mac.** What passed here is what a runner can"
@@ -717,16 +709,16 @@ jobs:
       # a running binary can be swapped underneath itself there.
       - name: Build the app
         env:
-          # ClipMint's Google client for YouTube uploads. A secret, never a
+          # ClipZoneRD's Google client for YouTube uploads. A secret, never a
           # file in the repo: YouTube's API policies forbid credentials in open
           # source projects. Unset, the build still works and users bring their own.
-          CLIPMINT_YOUTUBE_CLIENT: ${{ secrets.CLIPMINT_YOUTUBE_CLIENT }}
+          CLIPZONERD_YOUTUBE_CLIENT: ${{ secrets.CLIPZONERD_YOUTUBE_CLIENT }}
         run: python build_exe.py --onefile
 
       - name: Check what came out
         run: |
           set -e
-          app="dist/ClipMint"
+          app="dist/ClipZoneRD"
           if [ ! -f "$app" ]; then
             echo "::error::the build produced no binary"
             exit 1
@@ -753,8 +745,8 @@ jobs:
       - name: Start it, ask it for the interface, measure what it needs
         run: |
           set -e
-          cp dist/ClipMint ClipMint-linux-x86_64
-          ./ClipMint-linux-x86_64 > run.log 2>&1 &
+          cp dist/ClipZoneRD ClipZoneRD-linux-x86_64
+          ./ClipZoneRD-linux-x86_64 > run.log 2>&1 &
           pid=$!
 
           for _ in $(seq 1 180); do
@@ -819,7 +811,7 @@ jobs:
             exit 1
           fi
           echo "it served $(stat -c%s page.html) bytes of interface"
-          echo "SHA256=$(sha256sum ClipMint-linux-x86_64 | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "SHA256=$(sha256sum ClipZoneRD-linux-x86_64 | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
       # A second file rather than an archive around the first. The updater
       # downloads this asset, makes it executable and swaps it into place, so
@@ -840,18 +832,17 @@ jobs:
           fi
           }
           need docs/install/linux.txt
-          cp docs/install/linux.txt ClipMint-linux-README.txt
+          cp docs/install/linux.txt ClipZoneRD-linux-README.txt
           # Same reason as the exe: older installs look for this name.
-          cp ClipMint-linux-x86_64 StreamToShorts-linux-x86_64
-
+          
       - name: Attach the build to this run instead
         if: steps.tag.outputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ClipMint-linux-x86_64
+          name: ClipZoneRD-linux-x86_64
           path: |
-            ClipMint-linux-x86_64
-            ClipMint-linux-README.txt
+            ClipZoneRD-linux-x86_64
+            ClipZoneRD-linux-README.txt
           retention-days: 7
 
       - name: Add it to the release
@@ -863,9 +854,8 @@ jobs:
           # remotes. It cannot do that without git, and this repository has a
           # fork parent that gh reaches for first when it can.
           gh release upload "${{ steps.tag.outputs.name }}" \
-            ClipMint-linux-x86_64 \
-            ClipMint-linux-README.txt \
-            StreamToShorts-linux-x86_64 \
+            ClipZoneRD-linux-x86_64 \
+            ClipZoneRD-linux-README.txt \
             --clobber -R "${{ github.repository }}"
 
       - name: Summary
@@ -877,7 +867,7 @@ jobs:
               echo "### Dry run — Linux build (nothing published)"
             fi
             echo ""
-            echo "- \`ClipMint-linux-x86_64\` — ${SIZE} MB, SHA-256 \`$SHA256\`"
+            echo "- \`ClipZoneRD-linux-x86_64\` — ${SIZE} MB, SHA-256 \`$SHA256\`"
             echo "- Started here, and served its interface when asked."
             echo "- x86-64, needs $GLIBC or newer — Ubuntu 22.04, Debian 12,"
             echo "  Fedora 36, and anything after them."
@@ -889,7 +879,7 @@ jobs:
             echo "  blank window. Running from source with python3-gi installed"
             echo "  still gets a real window."
             echo "- \`chmod +x\` it and run it. It updates itself from then on."
-            echo "- \`ClipMint-linux-README.txt\` is the same instructions,"
+            echo "- \`ClipZoneRD-linux-README.txt\` is the same instructions,"
             echo "  published beside it — the binary cannot carry them itself."
             if [ "${{ steps.tag.outputs.publish }}" != "true" ]; then
               echo "- Attached to this run for 7 days. No release was created or touched."

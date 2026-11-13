@@ -1,4 +1,4 @@
-"""Desktop entry point — ClipMint as an app window, not a website.
+"""Desktop entry point — ClipZoneRD as an app window, not a website.
 
 Starts the local server on a free port in a background thread, then opens it
 in a native window (Edge WebView2 on Windows, WebKit elsewhere) so there is no
@@ -8,8 +8,8 @@ If a native webview isn't available it falls back to the default browser
 rather than failing, because a working browser window beats no app at all.
 
 Run from source:   python desktop.py
-Packaged:          ClipMint.exe, ClipMint.app on a Mac, or a bare
-                   ClipMint binary on Linux
+Packaged:          ClipZoneRD.exe, ClipZoneRD.app on a Mac, or a bare
+                   ClipZoneRD binary on Linux
 """
 import os
 import socket
@@ -20,7 +20,7 @@ import traceback
 from contextlib import closing
 from typing import Optional
 
-APP_NAME = "ClipMint"
+APP_NAME = "ClipZoneRD"
 
 
 def _resource_root() -> str:
@@ -67,7 +67,7 @@ def _prepare_environment() -> None:
     # would take them with it). Work in the user's video folder instead.
     if getattr(sys, "frozen", False):
         home = os.path.expanduser("~")
-        base = os.path.join(home, _media_dir_name(), "ClipMint")
+        base = os.path.join(home, _media_dir_name(), "ClipZoneRD")
         _adopt_legacy_media_dir(base)
         for sub in ("", "output", "webapp_output", "webapp_uploads"):
             os.makedirs(os.path.join(base, sub), exist_ok=True)
@@ -75,8 +75,9 @@ def _prepare_environment() -> None:
         os.environ.setdefault("LOCAL_OUTPUT_DIR", "output")
 
 
-# What the media folder was called before the rename to ClipMint.
-LEGACY_MEDIA_DIR_NAME = "StreamToShorts"
+# What the media folder was called before the renames to ClipZoneRD.
+# ClipMint (2024-2026) and, before that, StreamToShorts.
+LEGACY_MEDIA_DIR_NAMES = ("ClipMint", "StreamToShorts")
 
 
 def _adopt_legacy_media_dir(base: str) -> None:
@@ -88,20 +89,22 @@ def _adopt_legacy_media_dir(base: str) -> None:
     this renames the directory instead, which is instant on the same volume.
 
     Only when there is nothing at the new name yet, so a user who has already
-    made clips under ClipMint never has that folder disturbed. If the rename
+    made clips under ClipZoneRD never has that folder disturbed. If the rename
     fails -- another process holding a file open, the two paths landing on
     different volumes -- the app simply starts with a fresh folder and the old
     clips stay readable where they are. Losing the app to a startup crash
     would be the worse outcome.
     """
-    old = os.path.join(os.path.dirname(base), LEGACY_MEDIA_DIR_NAME)
-    if os.path.exists(base) or not os.path.isdir(old):
-        return
-    try:
-        os.rename(old, base)
-        print(f"[setup] moved your clips from {old} to {base}", flush=True)
-    except OSError as e:
-        print(f"[setup] left old clips in {old} ({e})", flush=True)
+    for legacy in LEGACY_MEDIA_DIR_NAMES:
+        old = os.path.join(os.path.dirname(base), legacy)
+        if os.path.exists(base) or not os.path.isdir(old):
+            continue
+        try:
+            os.rename(old, base)
+            print(f"[setup] moved your clips from {old} to {base}", flush=True)
+            return
+        except OSError as e:
+            print(f"[setup] left old clips in {old} ({e})", flush=True)
 
 
 LOG_FILENAME = "app.log"

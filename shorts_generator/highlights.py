@@ -348,6 +348,19 @@ Respond ONLY with valid JSON (no markdown, no explanation):
 PROMPT_VERSION = 7
 HOOK_SCORE_WEIGHT = 0.4       # how much the opening line counts toward the rank
 MAX_CLIP_SECONDS = 90         # reject anything the model returns above this
+MIN_SCORE = 55                # a moment under this is not a highlight: too weak to cut
+
+
+def strong(highlights: List[Dict]) -> List[Dict]:
+    """The moments worth cutting, best first.
+
+    Everything under MIN_SCORE is discarded — a run would rather hand back
+    fewer clips than a weak one. Never empty when there is anything at all:
+    the single best moment is kept, so a quiet video still yields one clip.
+    """
+    ranked = sorted(highlights, key=_by_score, reverse=True)
+    kept = [h for h in ranked if _by_score(h) >= MIN_SCORE]
+    return kept if kept else ranked[:1]
 CHUNK_SIZE_SECONDS = 1200       # 20-min chunks for long videos
 LONG_VIDEO_THRESHOLD = 1800     # chunk videos longer than 30 min
 CHUNK_OVERLAP_SECONDS = 60
@@ -930,6 +943,97 @@ def finalize(
     return highlights
 
 
+def _wordless_candidates(audio: Optional[AudioTrack], duration: float,
+                        existing: List[Dict],
+                        clip_seconds: Optional[List[float]] = None,
+                        transcript: Optional[Dict] = None) -> List[Dict]:
+    """Loud, wordless moments — laughter, a reaction, a noise.
+
+    The model ranks what was said, so a moment with no words in it never gets
+    proposed, however hard the room reacted. The loudness envelope does hear
+    it: scan the video for its loudest windows and offer the best few as
+    candidates, marked wordless, for the signals pass to score on the audio
+    alone. Windows that overlap a moment already proposed are skipped, and a
+    window that has words in it is not wordless — it is a spoken moment the
+    model already judged, and proposing it again would let a weak moment
+    sneak back in under a new name.
+    """
+    if audio is None or not duration or duration <= 0:
+        return []
+    if clip_seconds and len(clip_seconds) == 2:
+        window = (float(clip_seconds[0]) + float(clip_seconds[1])) / 2.0
+    else:
+        window = 40.0
+    window = max(20.0, min(90.0, window))
+    step = window / 2.0
+
+    def overlaps(start: float, end: float) -> bool:
+        for h in existing:
+            hs, he = float(h.get("start_time", 0)), float(h.get("end_time", 0))
+            shared = max(0.0, min(end, he) - max(start, hs))
+            if shared > 0.5 * (end - start):
+                return True
+        return False
+
+    # A burst is judged against the video's own typical loudness, not
+    # against its loudest 5%: peak/p95 saturates at ordinary speech (a normal
+    # speech window scores 1.0), while peak/median only fires on something
+    # genuinely louder than the room — laughter, a shout, a reaction.
+    import statistics
+    positive = [v for v in audio.rms if v > 0]
+    median = statistics.median(positive) if positive else 0.0
+    scored = []
+    t = 0.0
+    while t + window <= duration:
+        peak = audio.peak(t, t + window)
+        ratio = (peak / median) if median > 0 else 0.0
+        if ratio >= 1.8 and not overlaps(t, t + window):
+            if transcript is not None:
+                # Words in the window mean it is a spoken moment, not a
+                # wordless one — a handful of stray words is fine, a
+                # sentence is not.
+                words = signals.text_in(transcript, t, t + window).split()
+                if len(words) > 5:
+                    t += step
+                    continue
+            scored.append((ratio, t))
+        t += step
+    scored.sort(reverse=True)
+    out = []
+    for ratio, t in scored:
+        if len(out) >= 3:
+            break
+        peak = audio.peak_time(t, t + window) or (t + window / 2.0)
+        start = max(0.0, peak - window / 2.0)
+        end = min(float(duration), start + window)
+        start = max(0.0, end - window)
+        # Two scanned windows can centre on the same burst; the second is
+        # the same moment, not a second one.
+        if any(max(0.0, min(end, o["end_time"]) - max(start, o["start_time"]))
+               > 0.5 * (end - start) for o in out):
+            continue
+        score = int(round(30 + min(ratio, 3.0) / 3.0 * 70))
+        out.append({
+            "title": "Momento sin palabras",
+            "start_time": start,
+            "end_time": end,
+            "score": score,
+            "viral_score": score,
+            "hook_score": score,
+            "first_line": "",
+            "hook_sentence": "",
+            "virality_reason": ("Loud, wordless moment — laughter, a reaction "
+                                "or a noise the transcript could not rank."),
+            "on_screen": "",
+            "ask": 0,
+            "wordless": True,
+        })
+    if out:
+        print(f"[rank] {len(out)} wordless moment(s) from the audio spikes",
+              flush=True)
+    return out
+
+
 def get_highlights(
     transcript: Dict,
     num_clips: int = 3,
@@ -1039,6 +1143,8 @@ def get_highlights(
         result = call_highlight_api(text, content_info, duration, num_clips=num_clips, llm_fn=llm_fn, clip_seconds=clip_seconds, brief=brief, chat_note=chat_note, asks=asks)
         candidates = dedupe_highlights(result.get("highlights", []))
 
+    candidates += _wordless_candidates(audio, duration, candidates, clip_seconds,
+                                       transcript)
     highlights = finalize(
         candidates, transcript,
         clip_seconds=clip_seconds, audio=audio,
@@ -1066,7 +1172,10 @@ def pick(highlights: List[Dict], n: int,
     video could not fill hands its places to the best of the rest, so a run
     never comes back short because one kind of moment was not in it.
     """
-    ranked = sorted(highlights, key=_by_score, reverse=True)
+    # Highlights only: weak moments (under MIN_SCORE) are discarded, so a
+    # run hands back fewer clips rather than a weak one. strong() keeps the
+    # single best when nothing passes, so a run never comes back empty.
+    ranked = strong(highlights)
     if not asks:
         return ranked[:n]
     chosen: List[Dict] = []
@@ -1088,7 +1197,7 @@ def pool(highlights: List[Dict], size: int,
     The top `size` overall, plus each group's own best few, so a group whose
     moments score lower than another's is still looked at before it is filled.
     """
-    ranked = sorted(highlights, key=_by_score, reverse=True)
+    ranked = strong(highlights)
     out = ranked[:size]
     for i, a in enumerate(asks or [], 1):
         out += [h for h in ranked if h.get("ask") == i and h not in out][:a["count"] * 2]

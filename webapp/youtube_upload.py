@@ -15,8 +15,8 @@ How the pieces fit:
   comments. The user can withdraw it at myaccount.google.com at any time.
 
   The client.  Google identifies an app by an OAuth client ID. A release
-  build carries ClipMint's own, or the user pastes the JSON for one they made
-  themselves. ClipMint's is never in this repository: YouTube's developer
+  build carries ClipZoneRD's own, or the user pastes the JSON for one they made
+  themselves. ClipZoneRD's is never in this repository: YouTube's developer
   policies (III.D.1) forbid embedding API credentials in open source projects,
   so the release workflow writes it into the build from a GitHub secret. See
   build_exe.py and docs/youtube-upload.md.
@@ -67,13 +67,13 @@ API_URL = "https://www.googleapis.com/youtube/v3"
 # the app can say which channel is connected -- someone with a brand channel
 # and a personal one needs to see that before a clip lands on the wrong one --
 # so it can read a finished upload back to see whether YouTube kept it
-# private, and so it can read how the channel's ClipMint clips did
+# private, and so it can read how the channel's ClipZoneRD clips did
 # (youtube_stats.py).
 SCOPE_UPLOAD = "https://www.googleapis.com/auth/youtube.upload"
 SCOPE_READ = "https://www.googleapis.com/auth/youtube.readonly"
 SCOPES = [SCOPE_UPLOAD, SCOPE_READ]
 
-# Where a build keeps ClipMint's own Google client. Written by build_exe.py from
+# Where a build keeps ClipZoneRD's own Google client. Written by build_exe.py from
 # the CLIPMINT_YOUTUBE_CLIENT secret and ignored by git; absent from a source
 # checkout unless someone puts their own there.
 BUILTIN_CLIENT_FILE = "youtube_client.json"
@@ -186,7 +186,7 @@ def parse_client(text: str) -> Dict:
     if not isinstance(data, dict):
         raise ValueError("That isn't the JSON file Google gave you.")
     if "web" in data and "installed" not in data:
-        raise ValueError("That is a \"Web application\" client. ClipMint needs one of type "
+        raise ValueError("That is a \"Web application\" client. ClipZoneRD needs one of type "
                          "\"Desktop app\" — create another in Google Cloud, under "
                          "APIs & Services, Credentials.")
     inner = data.get("installed", data)
@@ -312,7 +312,7 @@ def _access_token(force: bool = False) -> str:
 
 
 def _headers(token: str) -> Dict:
-    return {"Authorization": f"Bearer {token}", "User-Agent": f"ClipMint/{APP_VERSION}"}
+    return {"Authorization": f"Bearer {token}", "User-Agent": f"ClipZoneRD/{APP_VERSION}"}
 
 
 # --- connecting -----------------------------------------------------------
@@ -372,7 +372,7 @@ def finish_connect(state: str, code: str, error: str) -> Optional[str]:
     with _lock:
         pending = _pending.pop(state or "", None)
     if not pending:
-        return _fail_connect("That sign-in link is stale. Click Connect in ClipMint again.")
+        return _fail_connect("That sign-in link is stale. Click Connect in ClipZoneRD again.")
     if error:
         if error == "access_denied":
             return _fail_connect("Sign-in was cancelled, so nothing was connected.")
@@ -400,7 +400,7 @@ def finish_connect(state: str, code: str, error: str) -> Optional[str]:
         return _fail_connect("Google was not given permission to upload videos. Connect "
                              "again and leave the \"upload\" box ticked.")
     if not data.get("refresh_token"):
-        return _fail_connect("Google didn't hand over a lasting sign-in. Remove ClipMint at "
+        return _fail_connect("Google didn't hand over a lasting sign-in. Remove ClipZoneRD at "
                              "myaccount.google.com/permissions, then connect again.")
 
     tok = {
@@ -619,7 +619,7 @@ def _explain(r: requests.Response) -> str:
         "invalidCategoryId": "YouTube didn't accept that category.",
         "invalidPublishAt": "YouTube didn't accept the schedule time.",
         "forbidden": "YouTube refused the upload for this account.",
-        "insufficientPermissions": "ClipMint wasn't given permission to upload. Disconnect "
+        "insufficientPermissions": "ClipZoneRD wasn't given permission to upload. Disconnect "
                                    "and connect again, leaving the upload box ticked.",
         "accessNotConfigured": _API_OFF,
         "SERVICE_DISABLED": _API_OFF,

@@ -1,13 +1,13 @@
-"""Build the ClipMint app with PyInstaller.
+"""Build the ClipZoneRD app with PyInstaller.
 
     pip install -r requirements-web.txt pyinstaller
     python build_exe.py
 
-Output lands in dist/. On Windows that is a ClipMint folder, or a single
-ClipMint.exe with --onefile (slower to start, since it unpacks to a temp
+Output lands in dist/. On Windows that is a ClipZoneRD folder, or a single
+ClipZoneRD.exe with --onefile (slower to start, since it unpacks to a temp
 dir each launch, but the only build that can replace itself when an update
 arrives). On Linux it is those same two shapes without the extension. On macOS
-it is ClipMint.app, a bundle you drag to Applications.
+it is ClipZoneRD.app, a bundle you drag to Applications.
 
 PyInstaller cannot cross-compile: a Windows build has to be made on Windows, a
 mac build on a Mac, and a Linux build on Linux. The release workflow runs one
@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).parent.resolve()
-NAME = "ClipMint"
+NAME = "ClipZoneRD"
 
 MAC = sys.platform == "darwin"
 LINUX = sys.platform.startswith("linux")
@@ -36,7 +36,7 @@ LINUX = sys.platform.startswith("linux")
 # Reverse-DNS, because macOS identifies an app by this rather than by its name.
 # Two apps sharing one identifier confuse everything from window restoration to
 # the keychain, so it is spelled out rather than left to PyInstaller's default.
-BUNDLE_ID = "com.github.klez799.clipmint"
+BUNDLE_ID = "com.clipzonerd.app"
 
 
 def _mb(size: int) -> str:
@@ -135,9 +135,9 @@ def _stamp_bundle(app: Path) -> None:
     data = plistlib.loads(plist.read_bytes())
     data["CFBundleShortVersionString"] = APP_VERSION
     data["CFBundleVersion"] = APP_VERSION
-    data["CFBundleDisplayName"] = "ClipMint"
+    data["CFBundleDisplayName"] = "ClipZoneRD"
     data["NSHumanReadableCopyright"] = (
-        "MIT licence. Source: github.com/klez799/clipmint")
+        "MIT licence. ClipZoneRD, based on ClipMint by Parth Bhadana — github.com/kleZ799/clipmint")
 
     # The window is a view onto a server this app runs itself, on 127.0.0.1
     # over plain http, and App Transport Security blocks that by default --
@@ -192,22 +192,22 @@ def _finish_bundle(app: Path) -> int:
 
 
 def _youtube_client() -> Optional[Path]:
-    """ClipMint's Google client for YouTube uploads, as a file to bundle.
+    """ClipZoneRD's Google client for YouTube uploads, as a file to bundle.
 
-    It comes from the CLIPMINT_YOUTUBE_CLIENT environment variable -- the JSON
+    It comes from the CLIPZONERD_YOUTUBE_CLIENT environment variable -- the JSON
     Google Cloud hands out for a Desktop app client -- which the release
     workflow fills from a repository secret. It never lives in the repo:
     YouTube's API policies (III.D.1) forbid embedding credentials in open
     source projects. Without it the build is complete; users paste their own
     client in Settings instead.
     """
-    raw = os.environ.get("CLIPMINT_YOUTUBE_CLIENT", "").strip()
+    raw = os.environ.get("CLIPZONERD_YOUTUBE_CLIENT", "").strip()
     local = ROOT / "webapp" / "youtube_client.json"
     if not raw:
         if local.is_file():
             print(f"bundling the YouTube client from {local.relative_to(ROOT)}")
             return local
-        print("no CLIPMINT_YOUTUBE_CLIENT — users will add their own Google client")
+        print("no CLIPZONERD_YOUTUBE_CLIENT — users will add their own Google client")
         return None
 
     sys.path.insert(0, str(ROOT))
@@ -215,19 +215,19 @@ def _youtube_client() -> Optional[Path]:
     try:
         client = parse_client(raw)
     except ValueError as e:
-        raise SystemExit(f"CLIPMINT_YOUTUBE_CLIENT is set but unusable: {e}")
+        raise SystemExit(f"CLIPZONERD_YOUTUBE_CLIENT is set but unusable: {e}")
 
     out = ROOT / "build" / "youtube_client.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"installed": {"client_id": client["id"],
                                              "client_secret": client["secret"]}}),
                    encoding="utf-8")
-    print("bundling ClipMint's YouTube client from CLIPMINT_YOUTUBE_CLIENT")
+    print("bundling ClipZoneRD's YouTube client from CLIPZONERD_YOUTUBE_CLIENT")
     return out
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Build the ClipMint executable")
+    ap = argparse.ArgumentParser(description="Build the ClipZoneRD executable")
     ap.add_argument("--onefile", action="store_true",
                     help="Single .exe instead of a folder (slower first launch)")
     ap.add_argument("--clean", action="store_true", help="Wipe build/ and dist/ first")
@@ -239,7 +239,7 @@ def main() -> int:
 
     if MAC and args.onefile:
         raise SystemExit(
-            "--onefile is a Windows shape. A mac release ships ClipMint.app, "
+            "--onefile is a Windows shape. A mac release ships ClipZoneRD.app, "
             "a bundle, and one file buys nothing here: the mac build does not "
             "replace itself, so the only thing it would add is unpacking 200 MB "
             "on every launch. Build without --onefile."
@@ -320,6 +320,9 @@ def main() -> int:
         # captions in whatever font libass finds, and skips the emoji.
         "--add-data", f"{ROOT / 'assets' / 'fonts'}{sep}assets/fonts",
         "--add-data", f"{ROOT / 'assets' / 'emoji'}{sep}assets/emoji",
+        # ClipZoneRD outro (appended to every rendered clip) and logo.
+        "--add-data", f"{ROOT / 'assets' / 'outro'}{sep}assets/outro",
+        "--add-data", f"{ROOT / 'assets' / 'clipzonerd-logo.png'}{sep}assets",
 
         # The native window. pywebview picks its backend at runtime, so
         # PyInstaller sees none of it without being told.

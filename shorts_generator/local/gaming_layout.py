@@ -377,6 +377,69 @@ def locate_webcam(source_path: str, start: float, end: float,
     }
 
 
+def _tracked_cam_panel(source_path: str, start: float, end: float, cam: Dict,
+                         out_w: int, cam_h: int) -> Optional[str]:
+    """The gamer panel with the face followed, for the split (Dividida) view.
+
+    The split view's cam panel used to be a static crop of the webcam box, so
+    a gamer who leaned or moved drifted out of frame. This cuts the webcam
+    box out, tracks the face inside it with the same machinery the
+    face-tracking layout uses — smooth follow, hold in place while the face
+    is covered or turned away, no jumps — and renders a panel the same size.
+    The crop window is smaller than the box (72%), at the panel's aspect, so
+    the frame has room to follow the face at all. Returns the panel file, or
+    None when there is no face to follow, and the caller falls back to the
+    static crop.
+    """
+    import shutil
+    import tempfile
+
+    from .clipper import (_crop_size, _filter_path, _write_commands,
+                         plan_path, track_faces)
+
+    work = tempfile.mkdtemp(prefix="cam_track_")
+    try:
+        cam_cut = os.path.join(work, "cam.mp4")
+        accel.run_encode(lambda enc: [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-ss", f"{start:.3f}", "-i", source_path, "-t", f"{end - start:.3f}",
+            "-vf", f"crop={cam['w']}:{cam['h']}:{cam['x']}:{cam['y']}",
+            "-an", *enc, cam_cut,
+        ], what="ffmpeg (cut webcam box)", crf=18, preset="ultrafast")
+
+        times, track, fps, frames, box_w, box_h = track_faces(cam_cut)
+        if not any(t is not None for t in track):
+            return None
+        crop_w, crop_h = _crop_size(box_w, box_h, out_w / cam_h)
+        crop_w = max(2, int(crop_w * 0.72) & ~1)
+        crop_h = max(2, int(crop_h * 0.72) & ~1)
+        plan = plan_path(times, track, fps, frames, box_w, box_h, crop_w, crop_h)
+        seen = sum(1 for t in track if t is not None)
+        moves = sum(1 for a, b in zip(plan, plan[1:]) if a != b)
+        print(f"[stacked] face in the gamer panel in {seen}/{len(track)} samples; "
+              f"panel moves on {moves}/{max(1, len(plan))} frames", flush=True)
+
+        panel = os.path.join(work, "cam_panel.mp4")
+        cmds = os.path.join(work, "path.cmd")
+        _write_commands(plan, fps, cmds)
+        x0, y0 = plan[0] if plan else (0, 0)
+        graph = (f"[0:v]sendcmd=f='{_filter_path(cmds)}',"
+                 f"crop@fx=w={crop_w}:h={crop_h}:x={x0}:y={y0},"
+                 f"scale={out_w}:{cam_h}:flags=lanczos,setsar=1[v]")
+        accel.run_encode(lambda enc: [
+            "ffmpeg", "-y", "-loglevel", "error", "-i", cam_cut,
+            "-filter_complex", graph, "-map", "[v]", "-an", *enc,
+            "-movflags", "+faststart", panel,
+        ], what="ffmpeg (tracked gamer panel)", crf=20)
+        # Out of the temp dir: the stacked render runs after this returns.
+        out = os.path.join(tempfile.gettempdir(),
+                           f"clipzonerd-cam-{os.getpid()}-{int(start * 1000)}.mp4")
+        shutil.copyfile(panel, out)
+        return out
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def render_stacked_clip(
     source_path: str,
     start: float,
@@ -426,6 +489,18 @@ def render_stacked_clip(
                                target_resolution=f"{out_w}x{out_h}", frame=frame)
         return {**info, "cam": cam, "full_frame": True}
 
+    # The gamer panel follows the face (Dividida): a static crop lets a gamer
+    # who leans or moves drift out of frame. On any failure the static crop
+    # below is used instead, so tracking never costs a clip.
+    cam_video: Optional[str] = None
+    if cam:
+        try:
+            cam_video = _tracked_cam_panel(source_path, start, end, cam, out_w, cam_h)
+        except Exception as e:  # noqa: BLE001 - the static crop is the fallback
+            print(f"[stacked] face tracking in the gamer panel failed ({e}) — "
+                  f"static crop", flush=True)
+            cam_video = None
+
     # Gameplay: the widest centre crop matching the bottom panel's aspect,
     # nudged away from the corner the webcam occupies.
     game_crop_w, game_crop_h = framing.gameplay_window(src_w, src_h, out_w, out_h,
@@ -441,7 +516,14 @@ def render_stacked_clip(
         game_x, _ = framing.place(frame, src_w, src_h, game_crop_w, game_crop_h,
                                   (game_x, 0))
 
-    if cam:
+    if cam and cam_video is not None:
+        filt = (
+            f"[1:v]setsar=1[cam];"
+            f"[0:v]crop={game_crop_w}:{game_crop_h}:{game_x}:0,"
+            f"scale={out_w}:{game_h}:flags=lanczos,setsar=1[game];"
+            f"[cam][game]vstack=inputs=2[v]"
+        )
+    elif cam:
         filt = (
             f"[0:v]crop={cam['w']}:{cam['h']}:{cam['x']}:{cam['y']},"
             f"scale={out_w}:{cam_h}:flags=lanczos,setsar=1[cam];"
@@ -459,24 +541,36 @@ def render_stacked_clip(
             f"scale={out_w}:{out_h}:flags=lanczos,setsar=1[v]"
         )
 
-    accel.run_encode(lambda enc: [
-        "ffmpeg", "-y", "-loglevel", "error",
-        "-ss", f"{start:.3f}", "-i", source_path, "-t", f"{end - start:.3f}",
-        "-filter_complex", filt,
-        "-map", "[v]", "-map", "0:a:0?",
-        "-af", LOUDNESS_FILTER,
-        *enc,
-        "-c:a", "aac", "-b:a", "160k",
-        "-movflags", "+faststart",
-        out_path,
-    ], what="ffmpeg (stacked render)", crf=23)
+    try:
+        # -ss and -t sit BEFORE the source -i, so they limit the source
+        # itself. (A -t after the source -i would belong to the next input —
+        # the cam panel — and the source would encode to its full length.)
+        inputs = (["-i", cam_video] if cam_video is not None else [])
+        accel.run_encode(lambda enc: [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", source_path,
+            *inputs,
+            "-filter_complex", filt,
+            "-map", "[v]", "-map", "0:a:0?",
+            "-af", LOUDNESS_FILTER,
+            *enc,
+            "-c:a", "aac", "-b:a", "160k",
+            "-movflags", "+faststart",
+            out_path,
+        ], what="ffmpeg (stacked render)", crf=23)
+    finally:
+        if cam_video is not None:
+            try:
+                os.remove(cam_video)
+            except OSError:
+                pass
     manual = bool(framing.normalise(frame))
     if not cam:
         return {"cam": None, "panel": framing.PICTURE, "manual": manual,
                 "x": framing.fraction(fb_x, src_w, fb_w),
                 "y": framing.fraction(fb_y, src_h, fb_h)}
     return {"cam": cam, "game_x": game_x, "cam_panel_h": cam_h,
-            "panel": framing.GAMEPLAY, "manual": manual,
+            "panel": framing.GAMEPLAY, "manual": manual, "tracked": bool(cam_video),
             "x": framing.fraction(game_x, src_w, game_crop_w)}
 
 

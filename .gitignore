@@ -29,6 +29,9 @@ shorts/
 # ...except the showcase: a tour of the app made on purpose for the README
 # and the site, not something the app produced from a video.
 !assets/showcase/*.mp4
+# ...and the ClipZoneRD outro, a brand asset shipped with the app and
+# appended to every rendered clip — not a video the app produced.
+!assets/outro/outro-animated-v5.mp4
 .DS_Store
 smoketest/
 run*.log

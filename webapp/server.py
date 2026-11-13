@@ -8,6 +8,7 @@ Run it with:
 """
 import asyncio
 import contextlib
+from datetime import datetime, timezone
 import copy
 import json
 import os
@@ -38,7 +39,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 VIDEO_SUFFIXES = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".ts", ".flv"}
 
-app = FastAPI(title="ClipMint")
+app = FastAPI(title="ClipZoneRD")
 
 
 @app.on_event("startup")
@@ -100,6 +101,12 @@ class LayoutPreviewRequest(EditChoice):
     # which is how this worked before the toggle existed.
     aspect_ratio: Optional[str] = None
     content_kind: Optional[str] = None
+    # ClipZoneRD picks: clip length in exact seconds, monetization mode, and
+    # the framing (stacked = Dividida, facetrack, center). None leaves each
+    # to the prompt's words.
+    duration_seconds: Optional[int] = None
+    monetize: Optional[bool] = None
+    layout: Optional[str] = None
 
 
 class JobRequest(EditChoice):
@@ -120,6 +127,9 @@ class JobRequest(EditChoice):
     # The "Kind of video" picker. None or "auto" leaves it to the prompt's own
     # words, and then to the ranker.
     content_kind: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    monetize: Optional[bool] = None
+    layout: Optional[str] = None
 
 
 # --- routes ---------------------------------------------------------------
@@ -1110,8 +1120,8 @@ async def youtube_callback(state: str = "", code: str = "", error: str = "") -> 
     else:
         who = youtube_upload.status().get("channel_title")
         head = f"Connected to {who}" if who else "YouTube is connected"
-        text = "You can close this tab and go back to ClipMint."
-    page = f"""<!doctype html><meta charset="utf-8"><title>ClipMint</title>
+        text = "You can close this tab and go back to ClipZoneRD."
+    page = f"""<!doctype html><meta charset="utf-8"><title>ClipZoneRD</title>
 <style>body{{font:16px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#f1f1f1;
 display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}}
 main{{max-width:460px;text-align:center}}h1{{font-size:22px}}p{{color:#aaa}}</style>
@@ -1204,6 +1214,42 @@ async def youtube_upload_clip(job_id: str, filename: str, req: YoutubeUploadRequ
     return youtube_upload.upload_status(uid) or {"id": uid}
 
 
+class ClipViewsRequest(BaseModel):
+    """The real view count of a published clip, entered by hand."""
+    views: int
+    platform: str = "youtube"
+
+
+@app.post("/api/jobs/{job_id}/clips/{filename}/views")
+async def set_clip_views(job_id: str, filename: str, req: ClipViewsRequest) -> dict:
+    """Record how a published clip actually did, in real views.
+
+    The creator enters the count herself — from TikTok, Facebook, Reels or
+    YouTube — and it lands on the clip's performance record, where
+    performance.analyse() totals it, shows the most-viewed clip, and feeds
+    it into the ranking's tuning for the next run. A clip with no publish
+    date yet is dated now, so it counts once it is old enough to mean
+    something (see performance.MIN_AGE).
+    """
+    job = _job_or_404(job_id)
+    safe = os.path.basename(filename)
+    clip = STORE.clip(job, safe)
+    if clip is None:
+        raise HTTPException(404, "No such clip")
+    if req.views < 0:
+        raise HTTPException(400, "Views cannot be negative")
+    platform = (req.platform or "youtube").strip().lower()
+    if platform not in ("youtube", "tiktok", "facebook", "instagram"):
+        platform = "youtube"
+    perf = dict(clip.get("performance") or {})
+    perf["views"] = int(req.views)
+    perf["platform"] = platform
+    if not perf.get("published_at"):
+        perf["published_at"] = datetime.now(timezone.utc).isoformat()
+    STORE.replace_clip(job, safe, {"performance": perf})
+    return {"clip": STORE.clip(job, safe)}
+
+
 @app.get("/api/youtube/uploads/{upload_id}")
 async def youtube_upload_progress(upload_id: str) -> dict:
     from . import youtube_upload
@@ -1253,6 +1299,35 @@ def _override_kind(spec: LayoutSpec, kind: Optional[str]) -> None:
     spec.content_kind = kind
     if spec.apply_kind():
         spec.notes.append(f"framing → follows the face, for a {content_kinds.LABELS[kind]}")
+    spec.validate()
+
+
+def _override_layout(spec: LayoutSpec, layout: Optional[str]) -> None:
+    """Let the framing picker beat whatever the prompt implied."""
+    from shorts_generator.layout_spec import LAYOUTS
+    if layout and layout in LAYOUTS:
+        spec.layout = layout
+        spec.layout_set = True
+        spec.validate()
+
+
+def _override_duration(spec: LayoutSpec, duration_seconds: Optional[int],
+                       monetize: Optional[bool]) -> None:
+    """Let the clip-length picker and the monetization switch set the length.
+
+    An exact length is a [n, n] band for the ranker. validate() then floors
+    it at 60 seconds when monetization mode is on, so a monetization run
+    never asks for a clip too short to earn.
+    """
+    if monetize is not None:
+        spec.monetize = bool(monetize)
+    if duration_seconds:
+        try:
+            n = int(duration_seconds)
+        except (TypeError, ValueError):
+            n = 0
+        if 5 <= n <= 300:
+            spec.clip_seconds = [float(n), float(n)]
     spec.validate()
 
 
@@ -1331,6 +1406,8 @@ async def layout_preview(req: LayoutPreviewRequest) -> dict:
     spec, reading = await _read_prompt(req.prompt, req.use_llm, PREVIEW_READ_SECONDS)
     _override_aspect(spec, req.aspect_ratio)
     _override_kind(spec, req.content_kind)
+    _override_layout(spec, req.layout)
+    _override_duration(spec, req.duration_seconds, req.monetize)
     _override_edit(spec, req)
     return {"spec": spec.to_dict(), "summary": spec.describe(),
             "notes": spec.notes, "warning": spec.warning(),
@@ -1356,6 +1433,50 @@ async def resolve(req: ResolveRequest) -> dict:
     if not videos:
         raise HTTPException(400, "No videos found at that link.")
     return {"type": "channel", "videos": videos}
+
+
+def _watched_channels() -> list[str]:
+    """The channel URLs the user follows, from their own settings."""
+    from shorts_generator import user_config
+    try:
+        channels = json.loads(user_config.get("watched_channels", "[]") or "[]")
+    except ValueError:
+        channels = []
+    return [c for c in channels if isinstance(c, str)]
+
+
+@app.get("/api/watched")
+async def watched_list() -> dict:
+    """The watched channels, for the Source panel."""
+    return {"channels": _watched_channels()}
+
+
+class WatchedRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/watched")
+async def watched_add(req: WatchedRequest) -> dict:
+    """Follow a channel: its latest videos are one tap away in the Source panel."""
+    from shorts_generator import user_config
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(400, "No URL given")
+    channels = _watched_channels()
+    if url not in channels:
+        channels.append(url)
+        user_config.save({"watched_channels": json.dumps(channels)})
+    return {"channels": channels}
+
+
+@app.post("/api/watched/remove")
+async def watched_remove(req: WatchedRequest) -> dict:
+    """Stop following a channel."""
+    from shorts_generator import user_config
+    url = req.url.strip()
+    channels = [c for c in _watched_channels() if c != url]
+    user_config.save({"watched_channels": json.dumps(channels)})
+    return {"channels": channels}
 
 
 @app.post("/api/upload")
@@ -1405,6 +1526,8 @@ async def create_job(req: JobRequest) -> dict:
     spec, _ = await _read_prompt(req.prompt, req.use_llm, JOB_READ_SECONDS)
     _override_aspect(spec, req.aspect_ratio)
     _override_kind(spec, req.content_kind)
+    _override_layout(spec, req.layout)
+    _override_duration(spec, req.duration_seconds, req.monetize)
     _override_edit(spec, req)
     if req.hook_replay is not None:
         spec.hook_replay = bool(req.hook_replay)

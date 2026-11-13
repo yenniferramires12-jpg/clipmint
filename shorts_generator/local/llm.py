@@ -156,7 +156,7 @@ def call_groq_llm(prompt: str) -> str:
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # OpenRouter shows these on its own dashboard, so a user can see which of
 # their requests came from this app.
-_OPENROUTER_HEADERS = {"X-Title": "ClipMint",
+_OPENROUTER_HEADERS = {"X-Title": "ClipZoneRD",
                        "HTTP-Referer": SITE_URL}
 
 

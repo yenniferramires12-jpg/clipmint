@@ -156,6 +156,10 @@ class LayoutSpec:
     # trim: cutting a clip to length afterwards would slice mid-sentence, so
     # the length has to be part of what it is asked to find.
     clip_seconds: Optional[List[float]] = None
+    # Monetization mode: when on, the AI seeks only moments longer than 1
+    # minute, so the clip can earn on TikTok Creator Rewards and YouTube
+    # (both pay only videos over 1 minute). validate() floors the length.
+    monetize: bool = False
     # Open every clip with a second of its own loudest moment before playing
     # it in full. Only does anything when the payoff is genuinely late in the
     # clip -- see hook_open -- so leaving it on costs nothing on the clips
@@ -175,8 +179,10 @@ class LayoutSpec:
     # typed "webcam at the top" over a vlog meant it.
     layout_set: bool = False
     # The edit made after the cut -- see autoedit. Captions burned in, one
-    # word lit at a time, in one of captions.PRESETS or "off".
-    captions: str = caption_styles.DEFAULT
+    # word lit at a time, in one of captions.PRESETS or "off". Off by default:
+    # every clip also ships with a separate subtitle file, and burned-in
+    # captions are an option, not the default.
+    captions: str = caption_styles.OFF
     # Put over the style: a face from captions.FONTS, the spoken word's colour
     # and the rest of the line's as RRGGBB, and where the words sit
     # (captions.POSITIONS). "" and "auto" leave each to the style and layout.
@@ -239,6 +245,15 @@ class LayoutSpec:
         # Below 2x the crop is inside the face; above 12x the webcam is a speck.
         self.face_zoom = max(2.0, min(12.0, float(self.face_zoom)))
         self.num_clips = max(1, min(MAX_CLIPS, int(self.num_clips)))
+        self.monetize = bool(self.monetize)
+        if self.monetize:
+            # A clip under 1 minute earns nothing on TikTok or YouTube, so a
+            # monetization run never asks for one, whatever else was set.
+            if self.clip_seconds and len(self.clip_seconds) == 2:
+                lo, hi = float(self.clip_seconds[0]), float(self.clip_seconds[1])
+                self.clip_seconds = [max(60.0, lo), max(120.0, hi, lo)]
+            else:
+                self.clip_seconds = [60.0, 120.0]
         self.content_kind = content_kinds.normalise(self.content_kind)
         self.layout_set = bool(self.layout_set)
         self.captions = caption_styles.normalise(self.captions)
@@ -752,7 +767,8 @@ def _parse_keywords(prompt: str, spec: LayoutSpec) -> set:
         spec.notes.append("layout → single frame, crop follows the face")
         resolved.add("layout")
     elif re.search(r"\bstack\w*\b|\b(web)?cam (on |at |to )?(the )?top\b|\btop\b.*\b(web)?cam\b"
-                   r"|\b(web)?cam above\b|\bsplit\b|\bpicture[\s-]*in[\s-]*picture\b|\bpip\b", p):
+                   r"|\b(web)?cam above\b|\bsplit\b|\bpicture[\s-]*in[\s-]*picture\b|\bpip\b"
+                   r"|\bdividida\b|\bgamer (on |at |to )?(the )?top\b", p):
         spec.layout = "stacked"
         spec.notes.append("layout → webcam on top, gameplay below")
         resolved.add("layout")
@@ -812,7 +828,7 @@ def _parse_keywords(prompt: str, spec: LayoutSpec) -> set:
 
 # --- stage 2: the model reads it --------------------------------------------
 
-_LLM_PROMPT = """Someone typed this into ClipMint, an app that cuts a long video into
+_LLM_PROMPT = """Someone typed this into ClipZoneRD, an app that cuts a long video into
 vertical Shorts. They write it like a chat message: casual, maybe misspelled,
 maybe not in English, maybe several requests in one sentence. Work out what
 they meant and turn it into settings.
@@ -826,7 +842,7 @@ a choice they made somewhere else in the app.
   [{{"count": 2, "want": "funny moments"}}, {{"count": 2, "want": "moments that ask the viewer a question"}}].
   "want" is a short plain-English description of that kind of moment.
 - "num_clips": how many clips in total, 1-30 (the sum of "asks" when there are groups)
-- "clip_seconds": [min, max] length of each clip in seconds, between 5 and 90.
+- "clip_seconds": [min, max] length of each clip in seconds, between 5 and 300.
   "30 sec" is about [25, 35]; "short ones" is about [15, 30]; "about a minute" is [50, 70]
 - "content_kind": what the SOURCE video is, only if they say so:
   "stream" | "vlog" | "podcast" | "tutorial" | "sports" | "other"
